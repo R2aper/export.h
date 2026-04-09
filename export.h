@@ -74,6 +74,21 @@ typedef struct csv_exporter_t {
 /// @param file output file (stdout, fopen(...) etc)
 csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header);
 
+#define MAX_JSON_DEPTH 32
+
+typedef struct json_exporter_t {
+  exporter_t base;
+  FILE *output;
+  int depth;
+  bool context_is_object[MAX_JSON_DEPTH];
+  bool level_first[MAX_JSON_DEPTH];
+
+} json_exporter_t;
+
+/// @brief Creates a new exporter in JSON format
+/// @param file output file (stdout, fopen(...) etc)
+json_exporter_t create_json_exporter(FILE *file);
+
 #ifdef EXPORT_IMPLEMENTATION
 
 /*----------------------CSV EXPORTER----------------------*/
@@ -212,6 +227,203 @@ csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header) {
 }
 
 /*----------------------CSV EXPORTER----------------------*/
+
+/*----------------------JSON EXPORTER---------------------*/
+
+static int json_flush_impl(exporter_t *self) {
+  json_exporter_t *json = (json_exporter_t *)self;
+  if (!json || !json->output)
+    return -1;
+
+  return fflush(json->output);
+}
+
+static int json_begin_object_impl(exporter_t *self, const char *name) {
+  json_exporter_t *json = (json_exporter_t *)self;
+  int result = 0;
+  if (!json || !json->output)
+    return -1;
+
+  if (json->depth > 0) {
+    int curr_level = json->depth - 1;
+    if (!json->level_first[curr_level])
+      result |= fputc(',', json->output);
+
+    if (json->context_is_object[curr_level] && name != NULL)
+      result |= fprintf(json->output, "\"%s\":", name);
+
+    json->level_first[curr_level] = false;
+  }
+
+  result |= fputc('{', json->output);
+
+  if (json->depth >= MAX_JSON_DEPTH)
+    return -1;
+
+  json->context_is_object[json->depth] = true;
+  json->level_first[json->depth] = true;
+  json->depth++;
+
+  return result;
+}
+
+static int json_end_object_impl(exporter_t *self) {
+  json_exporter_t *json = (json_exporter_t *)self;
+  if (!json || !json->output || json->depth == 0)
+    return -1;
+
+  int result = fputc('}', json->output);
+  json->depth--;
+  return result;
+}
+
+static int json_write_int_impl(exporter_t *self, const char *key,
+                               int64_t value) {
+  json_exporter_t *json = (json_exporter_t *)self;
+  int result = 0;
+  if (!json || !json->output || json->depth == 0)
+    return -1;
+
+  int curr_level = json->depth - 1;
+
+  if (!json->level_first[curr_level])
+    result |= fputc(',', json->output);
+
+  if (json->context_is_object[curr_level] && key != NULL) {
+    result |= fprintf(json->output, "\"%s\":", key);
+  }
+
+  result |= fprintf(json->output, "%lld", value);
+
+  json->level_first[curr_level] = false;
+  return result;
+}
+
+static int json_write_double_impl(exporter_t *self, const char *key,
+                                  double value) {
+  json_exporter_t *json = (json_exporter_t *)self;
+  int result = 0;
+  if (!json || !json->output || json->depth == 0)
+    return -1;
+
+  int curr_level = json->depth - 1;
+
+  if (!json->level_first[curr_level])
+    result |= fputc(',', json->output);
+
+  if (json->context_is_object[curr_level] && key != NULL)
+    result |= fprintf(json->output, "\"%s\":", key);
+
+  result |= fprintf(json->output, "%f", value);
+
+  json->level_first[curr_level] = false;
+  return result;
+}
+
+static int json_write_string_impl(exporter_t *self, const char *key,
+                                  const char *value) {
+  json_exporter_t *json = (json_exporter_t *)self;
+  int result = 0;
+  if (!json || !json->output || json->depth == 0)
+    return -1;
+
+  int curr_level = json->depth - 1;
+
+  if (!json->level_first[curr_level])
+    result |= fputc(',', json->output);
+
+  if (json->context_is_object[curr_level] && key != NULL)
+    result |= fprintf(json->output, "\"%s\":", key);
+
+  result |= fprintf(json->output, "\"%s\"", value ? value : "");
+
+  json->level_first[curr_level] = false;
+  return result;
+}
+
+static int json_write_bool_impl(exporter_t *self, const char *key, bool value) {
+  json_exporter_t *json = (json_exporter_t *)self;
+  int result = 0;
+  if (!json || !json->output || json->depth == 0)
+    return -1;
+
+  int curr_level = json->depth - 1;
+
+  if (!json->level_first[curr_level])
+    result |= fputc(',', json->output);
+
+  if (json->context_is_object[curr_level] && key != NULL)
+    result |= fprintf(json->output, "\"%s\":", key);
+
+  result |= fprintf(json->output, "%s", value ? "true" : "false");
+
+  json->level_first[curr_level] = false;
+  return result;
+}
+
+static int json_begin_array_impl(exporter_t *self, const char *key) {
+  json_exporter_t *json = (json_exporter_t *)self;
+  int result = 0;
+  if (!json || !json->output)
+    return -1;
+
+  if (json->depth > 0) {
+    int curr_level = json->depth - 1;
+    if (!json->level_first[curr_level])
+      result |= fputc(',', json->output);
+
+    if (json->context_is_object[curr_level] && key != NULL)
+      result |= fprintf(json->output, "\"%s\":", key);
+
+    json->level_first[curr_level] = false;
+  }
+
+  result |= fputc('[', json->output);
+
+  if (json->depth >= MAX_JSON_DEPTH)
+    return -1;
+
+  json->context_is_object[json->depth] = false; // array
+  json->level_first[json->depth] = true;
+  json->depth++;
+
+  return result;
+}
+
+static int json_end_array_impl(exporter_t *self) {
+  json_exporter_t *json = (json_exporter_t *)self;
+  if (!json || !json->output || json->depth == 0)
+    return -1;
+
+  int result = fputc(']', json->output);
+  json->depth--;
+  return result;
+}
+
+// dummy function
+static void json_destroy(exporter_t *self) { (void)self; }
+
+json_exporter_t create_json_exporter(FILE *file) {
+  json_exporter_t json = {0};
+
+  json.output = file;
+  json.depth = 0;
+
+  json.base.begin_object = json_begin_object_impl;
+  json.base.end_object = json_end_object_impl;
+  json.base.write_int = json_write_int_impl;
+  json.base.write_double = json_write_double_impl;
+  json.base.write_string = json_write_string_impl;
+  json.base.write_bool = json_write_bool_impl;
+  json.base.begin_array = json_begin_array_impl;
+  json.base.end_array = json_end_array_impl;
+  json.base.flush = json_flush_impl;
+  json.base.destroy = json_destroy;
+
+  return json;
+}
+
+/*----------------------JSON EXPORTER---------------------*/
 
 #endif // EXPORT_IMPLEMENTATION
 
