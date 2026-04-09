@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 typedef struct exporter_t exporter_t;
 
@@ -20,20 +21,20 @@ typedef struct exporter_t {
   /**
    * @brief Begins writing a new structure/object
    * @param name Name of the structure/object (may be NULL)
-   * @return 0 as success, otherwise - error
+   * @return 0 on success, otherwise -1 on error
    */
   int (*begin_object)(exporter_t *self, const char *name);
 
   /**
    * @brief Ends writing a structure/object
-   * @return 0 as success, otherwise - error
+   * @return 0 on success, otherwise -1 on error
    */
   int (*end_object)(exporter_t *self);
 
   /**
    * @brief Write functions
-   * @param key Field name (used as a key within the object).Can be NULL
-   * @return 0 as success, otherwise - error
+   * @param key Field name (used as a key within the object). Can be NULL
+   * @return 0 on success, otherwise -1 on error
    */
   int (*write_int)(exporter_t *self, const char *key, int64_t value);
   int (*write_double)(exporter_t *self, const char *key, double value);
@@ -43,17 +44,15 @@ typedef struct exporter_t {
 
   /**
    * @brief Begins writing an array for the specified key
-   * @param key Field name (used as a key within the object).Can be NULL
-   * @return 0 as success, otherwise - error
+   * @param key Field name (used as a key within the object). Can be NULL
+   * @return 0 on success, otherwise -1 on error
    */
   int (*begin_array)(exporter_t *self, const char *key);
 
   /// @brief Ends writing an array
-  /// @return 0 as success, otherwise - erro
   int (*end_array)(exporter_t *self);
 
   /// @brief Flush data into output
-  /// @return 0 as success, otherwise - error
   int (*flush)(exporter_t *self);
 
   /// @brief Frees up resources allocated to the exporter
@@ -74,17 +73,18 @@ typedef struct csv_exporter_t {
 
 /// @brief Creates a new exporter in CSV format
 /// @param file output file (stdout, fopen(...) etc)
+/// @param write_header_once if true, header is written only once (recommended
+/// for multi-row CSV)
 csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header,
                                    bool write_header_once);
-
-#define MAX_JSON_DEPTH 32
 
 typedef struct json_exporter_t {
   exporter_t base;
   FILE *output;
   int depth;
-  bool context_is_object[MAX_JSON_DEPTH];
-  bool level_first[MAX_JSON_DEPTH];
+  int capacity;
+  bool *context_is_object;
+  bool *level_first;
 
 } json_exporter_t;
 
@@ -104,21 +104,21 @@ static int csv_flush_impl(exporter_t *self) {
   return fflush(csv->output);
 }
 
-// Write csv header
+// Write csv header (only once if write_header_once == true)
 int csv_begin_object_impl(exporter_t *self, const char *name) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
-  int result = 0;
   if (!csv || !csv->output)
     return -1;
 
   csv->is_first = true;
-  if (!csv->header_written ||
-      (csv->header_written && !csv->write_header_once)) {
-    result |= fprintf(csv->output, "%s\n", csv->csv_header);
+
+  if (!csv->header_written || !csv->write_header_once) {
+    if (fprintf(csv->output, "%s\n", csv->csv_header) < 0)
+      return -1;
     csv->header_written = true;
   }
 
-  return result;
+  return 0;
 }
 
 // Add new line
@@ -128,7 +128,8 @@ int csv_end_object_impl(exporter_t *self) {
     return -1;
 
   csv->is_first = false;
-  return putc('\n', csv->output);
+
+  return (putc('\n', csv->output) == EOF) ? -1 : 0;
 }
 
 static int csv_write_int_impl(exporter_t *self, const char *key,
@@ -138,11 +139,14 @@ static int csv_write_int_impl(exporter_t *self, const char *key,
     return -1;
 
   if (!csv->is_first)
-    return putc((csv->in_array) ? ',' : ';', csv->output) |
-           fprintf(csv->output, "%lld", value);
+    return (putc((csv->in_array) ? ',' : ';', csv->output) == EOF ||
+            fprintf(csv->output, "%lld", value) < 0)
+               ? -1
+               : 0;
 
   csv->is_first = false;
-  return fprintf(csv->output, "%lld", value);
+
+  return (fprintf(csv->output, "%lld", value) < 0) ? -1 : 0;
 }
 
 static int csv_write_double_impl(exporter_t *self, const char *key,
@@ -152,11 +156,14 @@ static int csv_write_double_impl(exporter_t *self, const char *key,
     return -1;
 
   if (!csv->is_first)
-    return putc((csv->in_array) ? ',' : ';', csv->output) |
-           fprintf(csv->output, "%f", value);
+    return (putc((csv->in_array) ? ',' : ';', csv->output) == EOF ||
+            fprintf(csv->output, "%f", value) < 0)
+               ? -1
+               : 0;
 
   csv->is_first = false;
-  return fprintf(csv->output, "%f", value);
+
+  return (fprintf(csv->output, "%f", value) < 0) ? -1 : 0;
 }
 
 static int csv_write_string_impl(exporter_t *self, const char *key,
@@ -166,11 +173,14 @@ static int csv_write_string_impl(exporter_t *self, const char *key,
     return -1;
 
   if (!csv->is_first)
-    return putc((csv->in_array) ? ',' : ';', csv->output) |
-           fprintf(csv->output, "%s", value);
+    return (putc((csv->in_array) ? ',' : ';', csv->output) == EOF ||
+            fprintf(csv->output, "%s", value ? value : "") < 0)
+               ? -1
+               : 0;
 
   csv->is_first = false;
-  return fprintf(csv->output, "%s", value);
+
+  return (fprintf(csv->output, "%s", value ? value : "") < 0) ? -1 : 0;
 }
 
 static int csv_write_bool_impl(exporter_t *self, const char *key, bool value) {
@@ -179,11 +189,14 @@ static int csv_write_bool_impl(exporter_t *self, const char *key, bool value) {
     return -1;
 
   if (!csv->is_first)
-    return putc((csv->in_array) ? ',' : ';', csv->output) |
-           fprintf(csv->output, "%s", (value) ? "true" : "false");
+    return (putc((csv->in_array) ? ',' : ';', csv->output) == EOF ||
+            fprintf(csv->output, "%s", value ? "true" : "false") < 0)
+               ? -1
+               : 0;
 
   csv->is_first = false;
-  return fprintf(csv->output, "%s", (value) ? "true" : "false");
+
+  return (fprintf(csv->output, "%s", value ? "true" : "false") < 0) ? -1 : 0;
 }
 
 static int csv_write_null_impl(exporter_t *self, const char *key) {
@@ -192,11 +205,14 @@ static int csv_write_null_impl(exporter_t *self, const char *key) {
     return -1;
 
   if (!csv->is_first)
-    return putc((csv->in_array) ? ',' : ';', csv->output) |
-           fprintf(csv->output, "null");
+    return (putc((csv->in_array) ? ',' : ';', csv->output) == EOF ||
+            fprintf(csv->output, "null") < 0)
+               ? -1
+               : 0;
 
   csv->is_first = false;
-  return fprintf(csv->output, "null");
+
+  return (fprintf(csv->output, "null") < 0) ? -1 : 0;
 }
 
 static int csv_begin_array_impl(exporter_t *self, const char *key) {
@@ -206,12 +222,15 @@ static int csv_begin_array_impl(exporter_t *self, const char *key) {
 
   int result = 0;
   if (!csv->is_first)
-    result |= putc(';', csv->output);
+    result = putc(';', csv->output);
 
   csv->in_array = true;
   csv->is_first = true;
 
-  return (result | putc('[', csv->output));
+  if (result == EOF || putc('[', csv->output) == EOF)
+    return -1;
+
+  return 0;
 }
 
 static int csv_end_array_impl(exporter_t *self) {
@@ -222,7 +241,7 @@ static int csv_end_array_impl(exporter_t *self) {
   csv->in_array = false;
   csv->is_first = false;
 
-  return putc(']', csv->output);
+  return (putc(']', csv->output) == EOF) ? -1 : 0;
 }
 
 // dummy function
@@ -253,9 +272,31 @@ csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header,
   return csv;
 }
 
-/*----------------------CSV EXPORTER----------------------*/
+/*----------------------JSON EXPORTER----------------------*/
 
-/*----------------------JSON EXPORTER---------------------*/
+static int json_grow_stack(json_exporter_t *json) {
+  if (json->depth < json->capacity)
+    return 0;
+
+  int new_cap = (json->capacity == 0) ? 8 : json->capacity * 2;
+
+  bool *new_ctx =
+      (bool *)realloc(json->context_is_object, (size_t)new_cap * sizeof(bool));
+  bool *new_fst =
+      (bool *)realloc(json->level_first, (size_t)new_cap * sizeof(bool));
+
+  if (new_ctx == NULL || new_fst == NULL) {
+    free(new_ctx);
+    free(new_fst);
+    return -1;
+  }
+
+  json->context_is_object = new_ctx;
+  json->level_first = new_fst;
+  json->capacity = new_cap;
+
+  return 0;
+}
 
 static int json_flush_impl(exporter_t *self) {
   json_exporter_t *json = (json_exporter_t *)self;
@@ -267,31 +308,33 @@ static int json_flush_impl(exporter_t *self) {
 
 static int json_begin_object_impl(exporter_t *self, const char *name) {
   json_exporter_t *json = (json_exporter_t *)self;
-  int result = 0;
   if (!json || !json->output)
     return -1;
 
   if (json->depth > 0) {
     int curr_level = json->depth - 1;
-    if (!json->level_first[curr_level])
-      result |= fputc(',', json->output);
-
-    if (json->context_is_object[curr_level] && name != NULL)
-      result |= fprintf(json->output, "\"%s\":", name);
-
+    if (!json->level_first[curr_level]) {
+      if (fputc(',', json->output) == EOF)
+        return -1;
+    }
+    if (json->context_is_object[curr_level] && name != NULL) {
+      if (fprintf(json->output, "\"%s\":", name) < 0)
+        return -1;
+    }
     json->level_first[curr_level] = false;
   }
 
-  result |= fputc('{', json->output);
+  if (json_grow_stack(json) != 0)
+    return -1;
 
-  if (json->depth >= MAX_JSON_DEPTH)
+  if (fputc('{', json->output) == EOF)
     return -1;
 
   json->context_is_object[json->depth] = true;
   json->level_first[json->depth] = true;
   json->depth++;
 
-  return result;
+  return 0;
 }
 
 static int json_end_object_impl(exporter_t *self) {
@@ -299,142 +342,161 @@ static int json_end_object_impl(exporter_t *self) {
   if (!json || !json->output || json->depth == 0)
     return -1;
 
-  int result = fputc('}', json->output);
+  if (fputc('}', json->output) == EOF)
+    return -1;
+
   json->depth--;
-  return result;
+
+  return 0;
 }
 
 static int json_write_int_impl(exporter_t *self, const char *key,
                                int64_t value) {
   json_exporter_t *json = (json_exporter_t *)self;
-  int result = 0;
   if (!json || !json->output || json->depth == 0)
     return -1;
 
   int curr_level = json->depth - 1;
 
-  if (!json->level_first[curr_level])
-    result |= fputc(',', json->output);
-
-  if (json->context_is_object[curr_level] && key != NULL) {
-    result |= fprintf(json->output, "\"%s\":", key);
+  if (!json->level_first[curr_level]) {
+    if (fputc(',', json->output) == EOF)
+      return -1;
   }
-
-  result |= fprintf(json->output, "%lld", value);
+  if (json->context_is_object[curr_level] && key != NULL) {
+    if (fprintf(json->output, "\"%s\":", key) < 0)
+      return -1;
+  }
+  if (fprintf(json->output, "%lld", value) < 0)
+    return -1;
 
   json->level_first[curr_level] = false;
-  return result;
+
+  return 0;
 }
 
 static int json_write_double_impl(exporter_t *self, const char *key,
                                   double value) {
   json_exporter_t *json = (json_exporter_t *)self;
-  int result = 0;
   if (!json || !json->output || json->depth == 0)
     return -1;
 
   int curr_level = json->depth - 1;
 
-  if (!json->level_first[curr_level])
-    result |= fputc(',', json->output);
-
-  if (json->context_is_object[curr_level] && key != NULL)
-    result |= fprintf(json->output, "\"%s\":", key);
-
-  result |= fprintf(json->output, "%f", value);
+  if (!json->level_first[curr_level]) {
+    if (fputc(',', json->output) == EOF)
+      return -1;
+  }
+  if (json->context_is_object[curr_level] && key != NULL) {
+    if (fprintf(json->output, "\"%s\":", key) < 0)
+      return -1;
+  }
+  if (fprintf(json->output, "%f", value) < 0)
+    return -1;
 
   json->level_first[curr_level] = false;
-  return result;
+
+  return 0;
 }
 
 static int json_write_string_impl(exporter_t *self, const char *key,
                                   const char *value) {
   json_exporter_t *json = (json_exporter_t *)self;
-  int result = 0;
   if (!json || !json->output || json->depth == 0)
     return -1;
 
   int curr_level = json->depth - 1;
 
-  if (!json->level_first[curr_level])
-    result |= fputc(',', json->output);
-
-  if (json->context_is_object[curr_level] && key != NULL)
-    result |= fprintf(json->output, "\"%s\":", key);
-
-  result |= fprintf(json->output, "\"%s\"", value ? value : "");
+  if (!json->level_first[curr_level]) {
+    if (fputc(',', json->output) == EOF)
+      return -1;
+  }
+  if (json->context_is_object[curr_level] && key != NULL) {
+    if (fprintf(json->output, "\"%s\":", key) < 0)
+      return -1;
+  }
+  if (fprintf(json->output, "\"%s\"", value ? value : "") < 0)
+    return -1;
 
   json->level_first[curr_level] = false;
-  return result;
+
+  return 0;
 }
 
 static int json_write_bool_impl(exporter_t *self, const char *key, bool value) {
   json_exporter_t *json = (json_exporter_t *)self;
-  int result = 0;
   if (!json || !json->output || json->depth == 0)
     return -1;
 
   int curr_level = json->depth - 1;
 
-  if (!json->level_first[curr_level])
-    result |= fputc(',', json->output);
-
-  if (json->context_is_object[curr_level] && key != NULL)
-    result |= fprintf(json->output, "\"%s\":", key);
-
-  result |= fprintf(json->output, "%s", value ? "true" : "false");
+  if (!json->level_first[curr_level]) {
+    if (fputc(',', json->output) == EOF)
+      return -1;
+  }
+  if (json->context_is_object[curr_level] && key != NULL) {
+    if (fprintf(json->output, "\"%s\":", key) < 0)
+      return -1;
+  }
+  if (fprintf(json->output, "%s", value ? "true" : "false") < 0)
+    return -1;
 
   json->level_first[curr_level] = false;
-  return result;
+
+  return 0;
 }
 
 static int json_write_null_impl(exporter_t *self, const char *key) {
   json_exporter_t *json = (json_exporter_t *)self;
-  int result = 0;
   if (!json || !json->output || json->depth == 0)
     return -1;
 
   int curr_level = json->depth - 1;
 
-  if (!json->level_first[curr_level])
-    result |= fputc(',', json->output);
-
-  if (json->context_is_object[curr_level] && key != NULL)
-    result |= fprintf(json->output, "\"%s\":", key);
-
-  result |= fprintf(json->output, "null");
+  if (!json->level_first[curr_level]) {
+    if (fputc(',', json->output) == EOF)
+      return -1;
+  }
+  if (json->context_is_object[curr_level] && key != NULL) {
+    if (fprintf(json->output, "\"%s\":", key) < 0)
+      return -1;
+  }
+  if (fprintf(json->output, "null") < 0)
+    return -1;
 
   json->level_first[curr_level] = false;
-  return result;
+
+  return 0;
 }
 
 static int json_begin_array_impl(exporter_t *self, const char *key) {
   json_exporter_t *json = (json_exporter_t *)self;
-  int result = 0;
   if (!json || !json->output)
     return -1;
 
   if (json->depth > 0) {
     int curr_level = json->depth - 1;
-    if (!json->level_first[curr_level])
-      result |= fputc(',', json->output);
-
-    if (json->context_is_object[curr_level] && key != NULL)
-      result |= fprintf(json->output, "\"%s\":", key);
-
+    if (!json->level_first[curr_level]) {
+      if (fputc(',', json->output) == EOF)
+        return -1;
+    }
+    if (json->context_is_object[curr_level] && key != NULL) {
+      if (fprintf(json->output, "\"%s\":", key) < 0)
+        return -1;
+    }
     json->level_first[curr_level] = false;
   }
 
-  result |= fputc('[', json->output);
-
-  if (json->depth >= MAX_JSON_DEPTH)
+  if (json_grow_stack(json) != 0)
     return -1;
 
-  json->context_is_object[json->depth] = false; // array
+  if (fputc('[', json->output) == EOF)
+    return -1;
+
+  json->context_is_object[json->depth] = false; /* массив */
   json->level_first[json->depth] = true;
   json->depth++;
 
-  return result;
+  return 0;
 }
 
 static int json_end_array_impl(exporter_t *self) {
@@ -442,19 +504,30 @@ static int json_end_array_impl(exporter_t *self) {
   if (!json || !json->output || json->depth == 0)
     return -1;
 
-  int result = fputc(']', json->output);
+  if (fputc(']', json->output) == EOF)
+    return -1;
+
   json->depth--;
-  return result;
+
+  return 0;
 }
 
-// dummy function
-static void json_destroy(exporter_t *self) { (void)self; }
+static void json_destroy_impl(exporter_t *self) {
+  json_exporter_t *json = (json_exporter_t *)self;
+  if (!json)
+    return;
+  free(json->context_is_object);
+  free(json->level_first);
+}
 
 json_exporter_t create_json_exporter(FILE *file) {
   json_exporter_t json = {0};
 
   json.output = file;
   json.depth = 0;
+  json.capacity = 0;
+  json.context_is_object = NULL;
+  json.level_first = NULL;
 
   json.base.begin_object = json_begin_object_impl;
   json.base.end_object = json_end_object_impl;
@@ -466,12 +539,12 @@ json_exporter_t create_json_exporter(FILE *file) {
   json.base.begin_array = json_begin_array_impl;
   json.base.end_array = json_end_array_impl;
   json.base.flush = json_flush_impl;
-  json.base.destroy = json_destroy;
+  json.base.destroy = json_destroy_impl;
 
   return json;
 }
 
-/*----------------------JSON EXPORTER---------------------*/
+/*----------------------JSON EXPORTER----------------------*/
 
 #endif // EXPORT_IMPLEMENTATION
 
