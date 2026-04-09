@@ -39,7 +39,7 @@ typedef struct exporter_t {
   int (*write_double)(exporter_t *self, const char *key, double value);
   int (*write_string)(exporter_t *self, const char *key, const char *value);
   int (*write_bool)(exporter_t *self, const char *key, bool value);
-  // int (*write_null)(exporter_t *self, const char *key); TODO
+  int (*write_null)(exporter_t *self, const char *key);
 
   /**
    * @brief Begins writing an array for the specified key
@@ -176,6 +176,19 @@ static int csv_write_bool_impl(exporter_t *self, const char *key, bool value) {
   return fprintf(csv->output, "%s", (value) ? "true" : "false");
 }
 
+static int csv_write_null_impl(exporter_t *self, const char *key) {
+  csv_exporter_t *csv = (csv_exporter_t *)self;
+  if (!csv || !csv->output)
+    return -1;
+
+  if (!csv->is_first)
+    return putc((csv->in_array) ? ',' : ';', csv->output) |
+           fprintf(csv->output, "null");
+
+  csv->is_first = false;
+  return fprintf(csv->output, "null");
+}
+
 static int csv_begin_array_impl(exporter_t *self, const char *key) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
   if (!csv || !csv->output)
@@ -218,6 +231,7 @@ csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header) {
   csv.base.write_double = csv_write_double_impl;
   csv.base.write_string = csv_write_string_impl;
   csv.base.write_bool = csv_write_bool_impl;
+  csv.base.write_null = csv_write_null_impl;
   csv.base.begin_array = csv_begin_array_impl;
   csv.base.end_array = csv_end_array_impl;
   csv.base.flush = csv_flush_impl;
@@ -361,6 +375,26 @@ static int json_write_bool_impl(exporter_t *self, const char *key, bool value) {
   return result;
 }
 
+static int json_write_null_impl(exporter_t *self, const char *key) {
+  json_exporter_t *json = (json_exporter_t *)self;
+  int result = 0;
+  if (!json || !json->output || json->depth == 0)
+    return -1;
+
+  int curr_level = json->depth - 1;
+
+  if (!json->level_first[curr_level])
+    result |= fputc(',', json->output);
+
+  if (json->context_is_object[curr_level] && key != NULL)
+    result |= fprintf(json->output, "\"%s\":", key);
+
+  result |= fprintf(json->output, "null");
+
+  json->level_first[curr_level] = false;
+  return result;
+}
+
 static int json_begin_array_impl(exporter_t *self, const char *key) {
   json_exporter_t *json = (json_exporter_t *)self;
   int result = 0;
@@ -415,6 +449,7 @@ json_exporter_t create_json_exporter(FILE *file) {
   json.base.write_double = json_write_double_impl;
   json.base.write_string = json_write_string_impl;
   json.base.write_bool = json_write_bool_impl;
+  json.base.write_null = json_write_null_impl;
   json.base.begin_array = json_begin_array_impl;
   json.base.end_array = json_end_array_impl;
   json.base.flush = json_flush_impl;
