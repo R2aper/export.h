@@ -67,12 +67,15 @@ typedef struct csv_exporter_t {
   const char *csv_header;
   bool in_array;
   bool is_first;
+  bool header_written;
+  bool write_header_once;
 
 } csv_exporter_t;
 
 /// @brief Creates a new exporter in CSV format
 /// @param file output file (stdout, fopen(...) etc)
-csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header);
+csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header,
+                                   bool write_header_once);
 
 #define MAX_JSON_DEPTH 32
 
@@ -104,11 +107,18 @@ static int csv_flush_impl(exporter_t *self) {
 // Write csv header
 int csv_begin_object_impl(exporter_t *self, const char *name) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
+  int result = 0;
   if (!csv || !csv->output)
     return -1;
 
   csv->is_first = true;
-  return fprintf(csv->output, "%s\n", csv->csv_header);
+  if (!csv->header_written ||
+      (csv->header_written && !csv->write_header_once)) {
+    result |= fprintf(csv->output, "%s\n", csv->csv_header);
+    csv->header_written = true;
+  }
+
+  return result;
 }
 
 // Add new line
@@ -218,12 +228,15 @@ static int csv_end_array_impl(exporter_t *self) {
 // dummy function
 static void csv_destroy_impl(exporter_t *self) { (void)self; }
 
-csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header) {
+csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header,
+                                   bool write_header_once) {
   csv_exporter_t csv = {0};
 
   csv.output = file;
   csv.csv_header = csv_header;
   csv.in_array = false;
+  csv.header_written = false;
+  csv.write_header_once = write_header_once;
 
   csv.base.begin_object = csv_begin_object_impl;
   csv.base.end_object = csv_end_object_impl;
