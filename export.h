@@ -483,8 +483,6 @@ static int json_write_string_impl(exporter_t *self, const char *key,
     if (fprintf(json->output, "\"%s\":", key) < 0)
       return -1;
   }
-  if (fprintf(json->output, "\"%s\"", value ? value : "") < 0)
-    return -1;
 
   json_escape_string(json->output, value);
   json->level_first[curr_level] = false;
