@@ -8,8 +8,6 @@
 #include <stdlib.h>
 
 // TODO:
-// - Экранирование
-// - Полноценный CSV
 // - Обрабтка ощибок
 // - SQLITE
 
@@ -91,19 +89,22 @@ typedef struct json_exporter_t {
   int capacity;
   bool *context_is_object;
   bool *level_first;
+  bool pretty; ///<- if true — pretty-print JSON (2-space indent + newlines)
 
 } json_exporter_t;
 
 /// @brief Creates a new exporter in JSON format
 /// @param file output file (stdout, fopen(...) etc)
-json_exporter_t create_json_exporter(FILE *file);
+/// @param pretty if true, outputs pretty-printed JSON (newlines + 2-space
+/// indentation)
+json_exporter_t create_json_exporter(FILE *file, bool pretty);
 
 #ifdef EXPORT_IMPLEMENTATION
 
 /*----------------------CSV EXPORTER----------------------*/
 
-/* Helper: writes a properly quoted CSV string field according to RFC 4180
- * (always quoted with ", internal " doubled) */
+// Helper: writes a properly quoted CSV string field according to RFC 4180
+// (always quoted with ", internal " doubled)
 static inline int csv_write_quoted_string(FILE *out, const char *value) {
   if (fputc('"', out) == EOF)
     return -1;
@@ -343,6 +344,23 @@ static inline void json_escape_string(FILE *out, const char *str) {
   fputc('"', out);
 }
 
+/// Prints \n + 2-space indent  * level
+static int json_pretty_indent(json_exporter_t *json, int level) {
+  if (!json->pretty)
+    return 0;
+
+  if (fputc('\n', json->output) == EOF)
+    return -1;
+
+  int spaces = level * 2;
+  for (int i = 0; i < spaces; ++i) {
+    if (fputc(' ', json->output) == EOF)
+      return -1;
+  }
+
+  return 0;
+}
+
 static int json_grow_stack(json_exporter_t *json) {
   if (json->depth < json->capacity)
     return 0;
@@ -386,8 +404,11 @@ static int json_begin_object_impl(exporter_t *self, const char *name) {
       if (fputc(',', json->output) == EOF)
         return -1;
     }
+
+    if (json_pretty_indent(json, json->depth) != 0)
+      return -1;
     if (json->context_is_object[curr_level] && name != NULL) {
-      if (fprintf(json->output, "\"%s\":", name) < 0)
+      if (fprintf(json->output, "\"%s\":%s", name, json->pretty ? " " : "") < 0)
         return -1;
     }
     json->level_first[curr_level] = false;
@@ -411,6 +432,9 @@ static int json_end_object_impl(exporter_t *self) {
   if (!json || !json->output || json->depth == 0)
     return -1;
 
+  if (json_pretty_indent(json, json->depth - 1) != 0)
+    return -1;
+
   if (fputc('}', json->output) == EOF)
     return -1;
 
@@ -431,8 +455,11 @@ static int json_write_int_impl(exporter_t *self, const char *key,
     if (fputc(',', json->output) == EOF)
       return -1;
   }
+
+  if (json_pretty_indent(json, json->depth) != 0)
+    return -1;
   if (json->context_is_object[curr_level] && key != NULL) {
-    if (fprintf(json->output, "\"%s\":", key) < 0)
+    if (fprintf(json->output, "\"%s\":%s", key, json->pretty ? " " : "") < 0)
       return -1;
   }
   if (fprintf(json->output, "%lld", value) < 0)
@@ -455,8 +482,10 @@ static int json_write_double_impl(exporter_t *self, const char *key,
     if (fputc(',', json->output) == EOF)
       return -1;
   }
+  if (json_pretty_indent(json, json->depth) != 0)
+    return -1;
   if (json->context_is_object[curr_level] && key != NULL) {
-    if (fprintf(json->output, "\"%s\":", key) < 0)
+    if (fprintf(json->output, "\"%s\":%s", key, json->pretty ? " " : "") < 0)
       return -1;
   }
   if (fprintf(json->output, "%f", value) < 0)
@@ -479,8 +508,10 @@ static int json_write_string_impl(exporter_t *self, const char *key,
     if (fputc(',', json->output) == EOF)
       return -1;
   }
+  if (json_pretty_indent(json, json->depth) != 0)
+    return -1;
   if (json->context_is_object[curr_level] && key != NULL) {
-    if (fprintf(json->output, "\"%s\":", key) < 0)
+    if (fprintf(json->output, "\"%s\":%s", key, json->pretty ? " " : "") < 0)
       return -1;
   }
 
@@ -501,8 +532,10 @@ static int json_write_bool_impl(exporter_t *self, const char *key, bool value) {
     if (fputc(',', json->output) == EOF)
       return -1;
   }
+  if (json_pretty_indent(json, json->depth) != 0)
+    return -1;
   if (json->context_is_object[curr_level] && key != NULL) {
-    if (fprintf(json->output, "\"%s\":", key) < 0)
+    if (fprintf(json->output, "\"%s\":%s", key, json->pretty ? " " : "") < 0)
       return -1;
   }
   if (fprintf(json->output, "%s", value ? "true" : "false") < 0)
@@ -524,10 +557,15 @@ static int json_write_null_impl(exporter_t *self, const char *key) {
     if (fputc(',', json->output) == EOF)
       return -1;
   }
+
+  if (json_pretty_indent(json, json->depth) != 0)
+    return -1;
+
   if (json->context_is_object[curr_level] && key != NULL) {
-    if (fprintf(json->output, "\"%s\":", key) < 0)
+    if (fprintf(json->output, "\"%s\":%s", key, json->pretty ? " " : "") < 0)
       return -1;
   }
+
   if (fprintf(json->output, "null") < 0)
     return -1;
 
@@ -547,8 +585,12 @@ static int json_begin_array_impl(exporter_t *self, const char *key) {
       if (fputc(',', json->output) == EOF)
         return -1;
     }
+
+    if (json_pretty_indent(json, json->depth) != 0)
+      return -1;
+
     if (json->context_is_object[curr_level] && key != NULL) {
-      if (fprintf(json->output, "\"%s\":", key) < 0)
+      if (fprintf(json->output, "\"%s\":%s", key, json->pretty ? " " : "") < 0)
         return -1;
     }
     json->level_first[curr_level] = false;
@@ -572,6 +614,9 @@ static int json_end_array_impl(exporter_t *self) {
   if (!json || !json->output || json->depth == 0)
     return -1;
 
+  if (json_pretty_indent(json, json->depth - 1) != 0)
+    return -1;
+
   if (fputc(']', json->output) == EOF)
     return -1;
 
@@ -588,7 +633,7 @@ static void json_destroy_impl(exporter_t *self) {
   free(json->level_first);
 }
 
-json_exporter_t create_json_exporter(FILE *file) {
+json_exporter_t create_json_exporter(FILE *file, bool pretty) {
   json_exporter_t json = {0};
 
   json.output = file;
@@ -596,6 +641,7 @@ json_exporter_t create_json_exporter(FILE *file) {
   json.capacity = 0;
   json.context_is_object = NULL;
   json.level_first = NULL;
+  json.pretty = pretty;
 
   json.base.begin_object = json_begin_object_impl;
   json.base.end_object = json_end_object_impl;
