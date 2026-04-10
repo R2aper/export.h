@@ -7,6 +7,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// TODO:
+// - Экранирование
+// - Полноценный CSV
+// - Обрабтка ощибок
+// - SQLITE
+
 typedef struct exporter_t exporter_t;
 
 /**
@@ -96,6 +102,30 @@ json_exporter_t create_json_exporter(FILE *file);
 
 /*----------------------CSV EXPORTER----------------------*/
 
+/* Helper: writes a properly quoted CSV string field according to RFC 4180
+ * (always quoted with ", internal " doubled) */
+static inline int csv_write_quoted_string(FILE *out, const char *value) {
+  if (fputc('"', out) == EOF)
+    return -1;
+
+  if (value) {
+    for (const char *p = value; *p; ++p) {
+      if (*p == '"') {
+        if (fputc('"', out) == EOF || fputc('"', out) == EOF)
+          return -1;
+      } else {
+        if (fputc(*p, out) == EOF)
+          return -1;
+      }
+    }
+  }
+
+  if (fputc('"', out) == EOF)
+    return -1;
+
+  return 0;
+}
+
 static int csv_flush_impl(exporter_t *self) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
   if (!csv || !csv->output)
@@ -138,11 +168,10 @@ static int csv_write_int_impl(exporter_t *self, const char *key,
   if (!csv || !csv->output)
     return -1;
 
-  if (!csv->is_first)
-    return (putc((csv->in_array) ? ',' : ';', csv->output) == EOF ||
-            fprintf(csv->output, "%lld", value) < 0)
-               ? -1
-               : 0;
+  if (!csv->is_first) {
+    if (putc((csv->in_array) ? ',' : ';', csv->output) == EOF)
+      return -1;
+  }
 
   csv->is_first = false;
 
@@ -155,11 +184,10 @@ static int csv_write_double_impl(exporter_t *self, const char *key,
   if (!csv || !csv->output)
     return -1;
 
-  if (!csv->is_first)
-    return (putc((csv->in_array) ? ',' : ';', csv->output) == EOF ||
-            fprintf(csv->output, "%f", value) < 0)
-               ? -1
-               : 0;
+  if (!csv->is_first) {
+    if (putc((csv->in_array) ? ',' : ';', csv->output) == EOF)
+      return -1;
+  }
 
   csv->is_first = false;
 
@@ -172,15 +200,14 @@ static int csv_write_string_impl(exporter_t *self, const char *key,
   if (!csv || !csv->output)
     return -1;
 
-  if (!csv->is_first)
-    return (putc((csv->in_array) ? ',' : ';', csv->output) == EOF ||
-            fprintf(csv->output, "%s", value ? value : "") < 0)
-               ? -1
-               : 0;
+  if (!csv->is_first) {
+    if (putc((csv->in_array) ? ',' : ';', csv->output) == EOF)
+      return -1;
+  }
 
   csv->is_first = false;
 
-  return (fprintf(csv->output, "%s", value ? value : "") < 0) ? -1 : 0;
+  return csv_write_quoted_string(csv->output, value);
 }
 
 static int csv_write_bool_impl(exporter_t *self, const char *key, bool value) {
@@ -188,11 +215,10 @@ static int csv_write_bool_impl(exporter_t *self, const char *key, bool value) {
   if (!csv || !csv->output)
     return -1;
 
-  if (!csv->is_first)
-    return (putc((csv->in_array) ? ',' : ';', csv->output) == EOF ||
-            fprintf(csv->output, "%s", value ? "true" : "false") < 0)
-               ? -1
-               : 0;
+  if (!csv->is_first) {
+    if (putc((csv->in_array) ? ',' : ';', csv->output) == EOF)
+      return -1;
+  }
 
   csv->is_first = false;
 
@@ -204,11 +230,10 @@ static int csv_write_null_impl(exporter_t *self, const char *key) {
   if (!csv || !csv->output)
     return -1;
 
-  if (!csv->is_first)
-    return (putc((csv->in_array) ? ',' : ';', csv->output) == EOF ||
-            fprintf(csv->output, "null") < 0)
-               ? -1
-               : 0;
+  if (!csv->is_first) {
+    if (putc((csv->in_array) ? ',' : ';', csv->output) == EOF)
+      return -1;
+  }
 
   csv->is_first = false;
 
@@ -220,15 +245,16 @@ static int csv_begin_array_impl(exporter_t *self, const char *key) {
   if (!csv || !csv->output)
     return -1;
 
-  int result = 0;
-  if (!csv->is_first)
-    result = putc(';', csv->output);
+  if (!csv->is_first) {
+    if (putc((csv->in_array) ? ',' : ';', csv->output) == EOF)
+      return -1;
+  }
+
+  if (fputc('"', csv->output) == EOF || fputc('[', csv->output) == EOF)
+    return -1;
 
   csv->in_array = true;
   csv->is_first = true;
-
-  if (result == EOF || putc('[', csv->output) == EOF)
-    return -1;
 
   return 0;
 }
@@ -238,10 +264,13 @@ static int csv_end_array_impl(exporter_t *self) {
   if (!csv || !csv->output)
     return -1;
 
+  if (fputc(']', csv->output) == EOF || fputc('"', csv->output) == EOF)
+    return -1;
+
   csv->in_array = false;
   csv->is_first = false;
 
-  return (putc(']', csv->output) == EOF) ? -1 : 0;
+  return 0;
 }
 
 // dummy function
@@ -273,6 +302,46 @@ csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header,
 }
 
 /*----------------------JSON EXPORTER----------------------*/
+
+// Helper: Fully escaping strings according to the JSON standard
+static inline void json_escape_string(FILE *out, const char *str) {
+  fputc('"', out);
+  if (str) {
+    for (const char *p = str; *p; ++p) {
+      switch (*p) {
+      case '"':
+        fprintf(out, "\\\"");
+        break;
+      case '\\':
+        fprintf(out, "\\\\");
+        break;
+      case '\b':
+        fprintf(out, "\\b");
+        break;
+      case '\f':
+        fprintf(out, "\\f");
+        break;
+      case '\n':
+        fprintf(out, "\\n");
+        break;
+      case '\r':
+        fprintf(out, "\\r");
+        break;
+      case '\t':
+        fprintf(out, "\\t");
+        break;
+      default:
+        if ((unsigned char)*p < 0x20) {
+          fprintf(out, "\\u%04x", (unsigned char)*p);
+        } else {
+          fputc(*p, out);
+        }
+      }
+    }
+  }
+
+  fputc('"', out);
+}
 
 static int json_grow_stack(json_exporter_t *json) {
   if (json->depth < json->capacity)
@@ -417,6 +486,7 @@ static int json_write_string_impl(exporter_t *self, const char *key,
   if (fprintf(json->output, "\"%s\"", value ? value : "") < 0)
     return -1;
 
+  json_escape_string(json->output, value);
   json->level_first[curr_level] = false;
 
   return 0;
