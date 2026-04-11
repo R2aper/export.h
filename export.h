@@ -22,6 +22,7 @@ typedef struct exporter_t exporter_t;
 typedef struct exporter_t {
   /**
    * @brief Begins writing a new structure/object
+   *
    * @param name Name of the structure/object (may be NULL)
    * @return 0 on success, otherwise -1 on error
    */
@@ -29,12 +30,14 @@ typedef struct exporter_t {
 
   /**
    * @brief Ends writing a structure/object
+   *
    * @return 0 on success, otherwise -1 on error
    */
   int (*end_object)(exporter_t *self);
 
   /**
    * @brief Write functions
+   *
    * @param key Field name (used as a key within the object). Can be NULL
    * @return 0 on success, otherwise -1 on error
    */
@@ -46,6 +49,7 @@ typedef struct exporter_t {
 
   /**
    * @brief Begins writing an array for the specified key
+   *
    * @param key Field name (used as a key within the object). Can be NULL
    * @return 0 on success, otherwise -1 on error
    */
@@ -74,11 +78,36 @@ typedef struct csv_exporter_t {
 } csv_exporter_t;
 
 /// @brief Creates a new exporter in CSV format
+
 /// @param file output file (stdout, fopen(...) etc)
 /// @param write_header_once if true, header is written only once (recommended
 /// for multi-row CSV)
 csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header,
                                    bool write_header_once);
+
+/// @brief Sets whether the CSV header should be written only once
+
+/// @param csv Pointer to csv_exporter_t
+/// @param write_header_once if true — write header only on first begin_object
+/// call; if false — write header on every begin_object call
+/// @return 0 on success, -1 on error (e.g. csv is NULL)
+int csv_exporter_set_write_header_once(csv_exporter_t *csv,
+                                       bool write_header_once);
+
+/// @brief Sets the CSV header string
+
+/// @param csv Pointer to csv_exporter_t
+/// @param csv_header The header line (comma-separated column names). The string
+/// is not copied — caller must ensure it remains valid
+/// @return 0 on success, -1 on error (e.g. csv is NULL)
+int csv_exporter_set_csv_header(csv_exporter_t *csv, const char *csv_header);
+
+/// @brief Sets the output FILE* for the CSV exporter
+
+/// @param csv Pointer to csv_exporter_t
+/// @param file Output stream (e.g., stdout, fopen(...))
+/// @return 0 on success, -1 on error (e.g. csv or file is NULL)
+int csv_exporter_set_output(csv_exporter_t *csv, FILE *file);
 
 typedef struct json_exporter_t {
   exporter_t base;
@@ -92,16 +121,34 @@ typedef struct json_exporter_t {
 } json_exporter_t;
 
 /// @brief Creates a new exporter in JSON format
+
 /// @param file output file (stdout, fopen(...) etc)
 /// @param pretty if true, outputs pretty-printed JSON (newlines + 2-space
 /// indentation)
 json_exporter_t create_json_exporter(FILE *file, bool pretty);
 
+/// @brief Sets pretty-print mode for JSON output
+
+/// @param json Pointer to json_exporter_t
+/// @param pretty if true — enable pretty-printed JSON (newlines + 2-space
+/// indent); if false — compact JSON on a single line
+/// @return 0 on success, -1 on error (e.g. json is NULL)
+int json_exporter_set_pretty(json_exporter_t *json, bool pretty);
+
+/// @brief Sets the output FILE* for the JSON exporter and resets internal state
+
+/// @note This function frees internal buffers and resets depth to 0,
+/// effectively starting a fresh export
+/// @param json Pointer to json_exporter_t
+/// @param file Output stream (e.g., stdout, fopen(...))
+/// @return 0 on success, -1 on error (e.g. json or file is NULL)
+int json_exporter_set_output(json_exporter_t *json, FILE *file);
+
 #ifdef EXPORT_IMPLEMENTATION
 
 #include <stdlib.h>
 
-/*----------------------CSV EXPORTER----------------------*/
+/*------------------------CSV EXPORTER-----------------------*/
 
 // Helper: writes a properly quoted CSV string field according to RFC 4180
 // (always quoted with ", internal " doubled)
@@ -302,7 +349,37 @@ csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header,
   return csv;
 }
 
-/*----------------------JSON EXPORTER----------------------*/
+int csv_exporter_set_write_header_once(csv_exporter_t *csv,
+                                       bool write_header_once) {
+  if (!csv)
+    return -1;
+
+  csv->write_header_once = write_header_once;
+
+  return 0;
+}
+
+int csv_exporter_set_csv_header(csv_exporter_t *csv, const char *csv_header) {
+  if (!csv)
+    return -1;
+
+  csv->csv_header = csv_header;
+
+  return 0;
+}
+
+int csv_exporter_set_output(csv_exporter_t *csv, FILE *file) {
+  if (!csv || !file)
+    return -1;
+
+  csv->output = file;
+
+  return 0;
+}
+
+/*------------------------CSV EXPORTER-----------------------*/
+
+/*-----------------------JSON EXPORTER-----------------------*/
 
 // Helper: Fully escaping strings according to the JSON standard
 static inline void json_escape_string(FILE *out, const char *str) {
@@ -658,7 +735,32 @@ json_exporter_t create_json_exporter(FILE *file, bool pretty) {
   return json;
 }
 
-/*----------------------JSON EXPORTER----------------------*/
+int json_exporter_set_pretty(json_exporter_t *json, bool pretty) {
+  if (!json)
+    return -1;
+
+  json->pretty = pretty;
+
+  return 0;
+}
+
+int json_exporter_set_output(json_exporter_t *json, FILE *file) {
+  if (!json || !file)
+    return -1;
+
+  free(json->context_is_object);
+  free(json->level_first);
+
+  json->output = file;
+  json->depth = 0;
+  json->capacity = 0;
+  json->context_is_object = NULL;
+  json->level_first = NULL;
+
+  return 0;
+}
+
+/*-----------------------JSON EXPORTER-----------------------*/
 
 #endif // EXPORT_IMPLEMENTATION
 
