@@ -104,6 +104,7 @@ int csv_exporter_set_csv_header(csv_exporter_t *csv, const char *csv_header);
 
 /// @brief Sets the output FILE* for the CSV exporter
 
+/// @note This function resets internal states
 /// @param csv Pointer to csv_exporter_t
 /// @param file Output stream (e.g., stdout, fopen(...))
 /// @return 0 on success, -1 on error (e.g. csv or file is NULL)
@@ -373,6 +374,9 @@ int csv_exporter_set_output(csv_exporter_t *csv, FILE *file) {
     return -1;
 
   csv->output = file;
+  csv->in_array = false;
+  csv->is_first = true;
+  csv->header_written = false;
 
   return 0;
 }
