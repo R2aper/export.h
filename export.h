@@ -24,6 +24,7 @@ typedef struct exporter_t {
    * @brief Begins writing a new structure/object
    *
    * @param name Name of the structure/object (may be NULL)
+   *
    * @return 0 on success, otherwise -1 on error
    */
   int (*begin_object)(exporter_t *self, const char *name);
@@ -39,6 +40,7 @@ typedef struct exporter_t {
    * @brief Write functions
    *
    * @param key Field name (used as a key within the object). Can be NULL
+   *
    * @return 0 on success, otherwise -1 on error
    */
   int (*write_int)(exporter_t *self, const char *key, int64_t value);
@@ -51,6 +53,7 @@ typedef struct exporter_t {
    * @brief Begins writing an array for the specified key
    *
    * @param key Field name (used as a key within the object). Can be NULL
+   *
    * @return 0 on success, otherwise -1 on error
    */
   int (*begin_array)(exporter_t *self, const char *key);
@@ -77,37 +80,48 @@ typedef struct csv_exporter_t {
 
 } csv_exporter_t;
 
-/// @brief Creates a new exporter in CSV format
-
-/// @param file output file (stdout, fopen(...) etc)
-/// @param write_header_once if true, header is written only once (recommended
-/// for multi-row CSV)
+/**
+ * @brief Creates a new exporter in CSV format
+ *
+ * @param file output file (stdout, fopen(...) etc)
+ * @param write_header_once if true, header is written only once (recommended
+ * for multi-row CSV)
+ */
 csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header,
                                    bool write_header_once);
 
-/// @brief Sets whether the CSV header should be written only once
-
-/// @param csv Pointer to csv_exporter_t
-/// @param write_header_once if true — write header only on first begin_object
-/// call; if false — write header on every begin_object call
-/// @return 0 on success, -1 on error (e.g. csv is NULL)
+/**
+ * @brief Sets whether the CSV header should be written only once
+ *
+ * @param csv Pointer to csv_exporter_t
+ * @param write_header_once if true — write header only on first begin_object
+ * call; if false — write header on every begin_object call
+ *
+ * @return 0 on success, -1 on error (e.g. csv is NULL)
+ */
 int csv_exporter_set_write_header_once(csv_exporter_t *csv,
                                        bool write_header_once);
 
-/// @brief Sets the CSV header string
-
-/// @param csv Pointer to csv_exporter_t
-/// @param csv_header The header line (comma-separated column names). The string
-/// is not copied — caller must ensure it remains valid
-/// @return 0 on success, -1 on error (e.g. csv is NULL)
+/**
+ * @brief Sets the CSV header string
+ *
+ * @param csv Pointer to csv_exporter_t
+ * @param csv_header The header line (comma-separated column names). The string
+ * is not copied — caller must ensure it remains valid
+ *
+ * @return 0 on success, -1 on error (e.g. csv is NULL)
+ */
 int csv_exporter_set_csv_header(csv_exporter_t *csv, const char *csv_header);
 
-/// @brief Sets the output FILE* for the CSV exporter
-
-/// @note This function resets internal states
-/// @param csv Pointer to csv_exporter_t
-/// @param file Output stream (e.g., stdout, fopen(...))
-/// @return 0 on success, -1 on error (e.g. csv or file is NULL)
+/**
+ * @brief Sets the output FILE* for the CSV exporter
+ *
+ * @note This function resets internal states
+ * @param csv Pointer to csv_exporter_t
+ * @param file Output stream (e.g., stdout, fopen(...))
+ *
+ * @return 0 on success, -1 on error (e.g. csv or file is NULL)
+ */
 int csv_exporter_set_output(csv_exporter_t *csv, FILE *file);
 
 typedef struct json_exporter_t {
@@ -121,28 +135,36 @@ typedef struct json_exporter_t {
 
 } json_exporter_t;
 
-/// @brief Creates a new exporter in JSON format
-
-/// @param file output file (stdout, fopen(...) etc)
-/// @param pretty if true, outputs pretty-printed JSON (newlines + 2-space
-/// indentation)
+/**
+ * @brief Creates a new exporter in JSON format
+ *
+ * @param file output file (stdout, fopen(...) etc)
+ * @param pretty if true, outputs pretty-printed JSON (newlines + 2-space
+ * indentation)
+ */
 json_exporter_t create_json_exporter(FILE *file, bool pretty);
 
-/// @brief Sets pretty-print mode for JSON output
-
-/// @param json Pointer to json_exporter_t
-/// @param pretty if true — enable pretty-printed JSON (newlines + 2-space
-/// indent); if false — compact JSON on a single line
-/// @return 0 on success, -1 on error (e.g. json is NULL)
+/**
+ * @brief Sets pretty-print mode for JSON output
+ *
+ * @param json Pointer to json_exporter_t
+ * @param pretty if true — enable pretty-printed JSON (newlines + 2-space
+ * indent); if false — compact JSON on a single line
+ *
+ * @return 0 on success, -1 on error (e.g. json is NULL)
+ */
 int json_exporter_set_pretty(json_exporter_t *json, bool pretty);
 
-/// @brief Sets the output FILE* for the JSON exporter and resets internal state
-
-/// @note This function frees internal buffers and resets depth to 0,
-/// effectively starting a fresh export
-/// @param json Pointer to json_exporter_t
-/// @param file Output stream (e.g., stdout, fopen(...))
-/// @return 0 on success, -1 on error (e.g. json or file is NULL)
+/**
+ * @brief Sets the output FILE* for the JSON exporter and resets internal state
+ * @note This function frees internal buffers and resets depth to 0,
+ * effectively starting a fresh export
+ *
+ * @param json Pointer to json_exporter_t
+ * @param file Output stream (e.g., stdout, fopen(...))
+ *
+ * @return 0 on success, -1 on error (e.g. json or file is NULL)
+ */
 int json_exporter_set_output(json_exporter_t *json, FILE *file);
 
 #ifdef EXPORT_IMPLEMENTATION
