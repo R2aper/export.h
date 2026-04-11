@@ -1,15 +1,13 @@
 #ifndef EXPORT_H
 #define EXPORT_H
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-
 // TODO:
 // - Обрабтка ощибок
 // - SQLITE
+
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
 
 typedef struct exporter_t exporter_t;
 
@@ -100,6 +98,8 @@ typedef struct json_exporter_t {
 json_exporter_t create_json_exporter(FILE *file, bool pretty);
 
 #ifdef EXPORT_IMPLEMENTATION
+
+#include <stdlib.h>
 
 /*----------------------CSV EXPORTER----------------------*/
 
