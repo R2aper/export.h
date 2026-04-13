@@ -131,7 +131,8 @@ typedef struct json_exporter_t {
   int capacity;
   bool *context_is_object;
   bool *level_first;
-  bool pretty; ///<- if true — pretty-print JSON (2-space indent + newlines)
+  bool pretty;    ///<- if true — pretty-print JSON (2-space indent + newlines)
+  bool jsonl;     ///<- if true — JSONL mode (each object on separate line, no outer array)
 
 } json_exporter_t;
 
@@ -141,8 +142,9 @@ typedef struct json_exporter_t {
  * @param file output file (stdout, fopen(...) etc)
  * @param pretty if true, outputs pretty-printed JSON (newlines + 2-space
  * indentation)
+ * @param jsonl if true, enables JSONL mode (each object on a separate line)
  */
-json_exporter_t create_json_exporter(FILE *file, bool pretty);
+json_exporter_t create_json_exporter(FILE *file, bool pretty, bool jsonl);
 
 /**
  * @brief Sets pretty-print mode for JSON output
@@ -154,6 +156,17 @@ json_exporter_t create_json_exporter(FILE *file, bool pretty);
  * @return 0 on success, -1 on error (e.g. json is NULL)
  */
 int json_exporter_set_pretty(json_exporter_t *json, bool pretty);
+
+/**
+ * @brief Sets JSONL mode for JSON output
+ *
+ * @param json Pointer to json_exporter_t
+ * @param jsonl if true — enable JSONL mode (each object on separate line,
+ * no outer wrapping); if false — standard JSON mode
+ *
+ * @return 0 on success, -1 on error (e.g. json is NULL)
+ */
+int json_exporter_set_jsonl(json_exporter_t *json, bool jsonl);
 
 /**
  * @brief Sets the output FILE* for the JSON exporter and resets internal state
@@ -501,6 +514,21 @@ static int json_begin_object_impl(exporter_t *self, const char *name) {
   if (!json || !json->output)
     return -1;
 
+  // JSONL mode: at depth 0, just start the object
+  if (json->jsonl && json->depth == 0) {
+    if (fputc('{', json->output) == EOF)
+      return -1;
+
+    if (json_grow_stack(json) != 0)
+      return -1;
+
+    json->context_is_object[json->depth] = true;
+    json->level_first[json->depth] = true;
+    json->depth++;
+
+    return 0;
+  }
+
   if (json->depth > 0) {
     int curr_level = json->depth - 1;
     if (!json->level_first[curr_level]) {
@@ -535,13 +563,22 @@ static int json_end_object_impl(exporter_t *self) {
   if (!json || !json->output || json->depth == 0)
     return -1;
 
-  if (json_pretty_indent(json, json->depth - 1) != 0)
+  json->depth--;
+
+  // JSONL mode: at depth 0, end object and add newline
+  if (json->jsonl && json->depth == 0) {
+    if (fputc('}', json->output) == EOF)
+      return -1;
+    if (fputc('\n', json->output) == EOF)
+      return -1;
+    return 0;
+  }
+
+  if (json_pretty_indent(json, json->depth) != 0)
     return -1;
 
   if (fputc('}', json->output) == EOF)
     return -1;
-
-  json->depth--;
 
   return 0;
 }
@@ -736,7 +773,7 @@ static void json_destroy_impl(exporter_t *self) {
   free(json->level_first);
 }
 
-json_exporter_t create_json_exporter(FILE *file, bool pretty) {
+json_exporter_t create_json_exporter(FILE *file, bool pretty, bool jsonl) {
   json_exporter_t json = {0};
 
   json.output = file;
@@ -745,6 +782,7 @@ json_exporter_t create_json_exporter(FILE *file, bool pretty) {
   json.context_is_object = NULL;
   json.level_first = NULL;
   json.pretty = pretty;
+  json.jsonl = jsonl;
 
   json.base.begin_object = json_begin_object_impl;
   json.base.end_object = json_end_object_impl;
@@ -770,6 +808,15 @@ int json_exporter_set_pretty(json_exporter_t *json, bool pretty) {
   return 0;
 }
 
+int json_exporter_set_jsonl(json_exporter_t *json, bool jsonl) {
+  if (!json)
+    return -1;
+
+  json->jsonl = jsonl;
+
+  return 0;
+}
+
 int json_exporter_set_output(json_exporter_t *json, FILE *file) {
   if (!json || !file)
     return -1;
@@ -782,6 +829,7 @@ int json_exporter_set_output(json_exporter_t *json, FILE *file) {
   json->capacity = 0;
   json->context_is_object = NULL;
   json->level_first = NULL;
+  json->jsonl = false;
 
   return 0;
 }
