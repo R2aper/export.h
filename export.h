@@ -2,8 +2,9 @@
 #define EXPORT_H
 
 // TODO:
-// - Обрабтка ощибок
 // - SQLITE
+// - Raw format
+// - Errors handling
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -131,8 +132,9 @@ typedef struct json_exporter_t {
   int capacity;
   bool *context_is_object;
   bool *level_first;
-  bool pretty;    ///<- if true — pretty-print JSON (2-space indent + newlines)
-  bool jsonl;     ///<- if true — JSONL mode (each object on separate line, no outer array)
+  bool pretty; ///<- if true — pretty-print JSON (2-space indent + newlines)
+  bool jsonl; ///<- if true — JSONL mode (each object on separate line, no outer
+              ///<array)
 
 } json_exporter_t;
 
