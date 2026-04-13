@@ -781,7 +781,7 @@ static int json_begin_array_impl(exporter_t *self, const char *key) {
   if (fputc('[', json->output) == EOF)
     return -1;
 
-  json->context_is_object[json->depth] = false; /* массив */
+  json->context_is_object[json->depth] = false;
   json->level_first[json->depth] = true;
   json->depth++;
 
@@ -880,6 +880,287 @@ int json_exporter_set_output(json_exporter_t *json, FILE *file) {
 #ifdef SQLITE_EXPORT
 
 #include <sqlite3.h>
+#include <string.h>
+
+static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
+  if (!sqlite || sqlite->table_created)
+    return 0;
+
+  if (!sqlite->column_names || !sqlite->table_name)
+    return -1;
+
+  // Build CREATE TABLE statement
+  // column_names is semicolon-separated: "id;name;value"
+  // We need: "id INTEGER, name TEXT, value REAL" (all as TEXT for simplicity)
+  char *sql = NULL;
+  size_t sql_len = 0;
+
+  // Count columns and build column definitions
+  const char *cols = sqlite->column_names;
+  size_t cols_len = strlen(cols);
+
+  // TODO:
+  //  Estimate buffer size: "CREATE TABLE IF NOT EXISTS " + table + " (" +
+  //  cols*10 + ");"
+  sql_len = 64 + strlen(sqlite->table_name) + cols_len * 16;
+  sql = (char *)malloc(sql_len);
+  if (!sql)
+    return -1;
+
+  // Start CREATE TABLE statement
+  int offset = snprintf(sql, sql_len, "CREATE TABLE IF NOT EXISTS %s (",
+                        sqlite->table_name);
+  if (offset < 0) {
+    free(sql);
+    return -1;
+  }
+
+  // Parse column names and create TEXT columns
+  const char *start = cols;
+  const char *end = cols;
+  bool first_col = true;
+
+  while (1) {
+    if (*end == ';' || *end == '\0') {
+      size_t col_len = (size_t)(end - start);
+
+      if (!first_col) {
+        offset = snprintf(sql + offset, sql_len - offset, ", ");
+        if (offset < 0) {
+          free(sql);
+          return -1;
+        }
+      }
+
+      // Write column name as TEXT type
+      offset = snprintf(sql + offset, sql_len - offset, "%.*s TEXT",
+                        (int)col_len, start);
+      if (offset < 0) {
+        free(sql);
+        return -1;
+      }
+
+      first_col = false;
+
+      if (*end == '\0')
+        break;
+      start = end + 1;
+    }
+    end++;
+  }
+
+  // Close statement
+  offset = snprintf(sql + offset, sql_len - offset, ")");
+  if (offset < 0) {
+    free(sql);
+    return -1;
+  }
+
+  // Execute CREATE TABLE
+  char *err_msg = NULL;
+  int rc = sqlite3_exec(sqlite->db, sql, NULL, NULL, &err_msg);
+  free(sql);
+
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "SQLite error: %s\n", err_msg); // TODO:
+    sqlite3_free(err_msg);
+    return -1;
+  }
+
+  sqlite->table_created = true;
+
+  return 0;
+}
+
+static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
+  if (!sqlite || !sqlite->column_names || !sqlite->table_name)
+    return -1;
+
+  // If statement already exists, skip
+  if (sqlite->stmt)
+    return 0;
+
+  // Build INSERT statement: INSERT INTO table (col1, col2, ...) VALUES (?, ?,
+  // ...) Count columns first
+  int col_count = 1;
+  for (const char *p = sqlite->column_names; *p; ++p) {
+    if (*p == ';')
+      col_count++;
+  }
+
+  sqlite->column_count = col_count;
+
+  // TODO:
+  // Estimate buffer size
+  size_t cols_len = strlen(sqlite->column_names);
+  size_t sql_len = 64 + strlen(sqlite->table_name) + cols_len + col_count * 4;
+  char *sql = (char *)malloc(sql_len);
+  if (!sql)
+    return -1;
+
+  //  Start: INSERT INTO table (
+  int offset = snprintf(sql, sql_len, "INSERT INTO %s (", sqlite->table_name);
+  if (offset < 0) {
+    free(sql);
+    return -1;
+  }
+
+  // Column names
+  const char *start = sqlite->column_names;
+  const char *end = sqlite->column_names;
+  bool first = true;
+
+  while (1) {
+    if (*end == ';' || *end == '\0') {
+      size_t col_len = (size_t)(end - start);
+
+      if (!first) {
+        offset = snprintf(sql + offset, sql_len - offset, ", ");
+        if (offset < 0) {
+          free(sql);
+          return -1;
+        }
+      }
+
+      offset =
+          snprintf(sql + offset, sql_len - offset, "%.*s", (int)col_len, start);
+      if (offset < 0) {
+        free(sql);
+        return -1;
+      }
+
+      first = false;
+
+      if (*end == '\0')
+        break;
+      start = end + 1;
+    }
+    end++;
+  }
+
+  // VALUES part
+  offset = snprintf(sql + offset, sql_len - offset, ") VALUES (");
+  if (offset < 0) {
+    free(sql);
+    return -1;
+  }
+
+  for (int i = 0; i < col_count; ++i) {
+    if (i > 0) {
+      offset = snprintf(sql + offset, sql_len - offset, ", ");
+      if (offset < 0) {
+        free(sql);
+        return -1;
+      }
+    }
+    offset = snprintf(sql + offset, sql_len - offset, "?");
+    if (offset < 0) {
+      free(sql);
+      return -1;
+    }
+  }
+
+  offset = snprintf(sql + offset, sql_len - offset, ")");
+  if (offset < 0) {
+    free(sql);
+    return -1;
+  }
+
+  // Prepare statement
+  int rc = sqlite3_prepare_v2(sqlite->db, sql, -1, &sqlite->stmt, NULL);
+  free(sql);
+
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "SQLite prepare error: %s\n",
+            sqlite3_errmsg(sqlite->db)); // TODO:
+    sqlite->stmt = NULL;
+    return -1;
+  }
+
+  return 0;
+}
+
+static inline int sqlite_reset_stmt(sqlite_exporter_t *sqlite) {
+  if (!sqlite || !sqlite->stmt)
+    return -1;
+
+  int rc = sqlite3_reset(sqlite->stmt);
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "SQLite reset error: %s\n",
+            sqlite3_errmsg(sqlite->db)); // TODO:
+    return -1;
+  }
+
+  rc = sqlite3_clear_bindings(sqlite->stmt);
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "SQLite clear bindings error: %s\n",
+            sqlite3_errmsg(sqlite->db)); // TODO:
+    return -1;
+  }
+
+  return 0;
+}
+
+static int sqlite_begin_object_impl(exporter_t *self, const char *name) {
+  sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
+  if (!sqlite || !sqlite->db)
+    return -1;
+
+  // Ensure table exists
+  if (sqlite_ensure_table_created(sqlite) != 0)
+    return -1;
+
+  // Prepare INSERT statement if not already
+  if (sqlite_prepare_insert_stmt(sqlite) != 0)
+    return -1;
+
+  // Begin transaction if not active
+  if (!sqlite->in_transaction) {
+    char *err_msg = NULL;
+    int rc =
+        sqlite3_exec(sqlite->db, "BEGIN TRANSACTION", NULL, NULL, &err_msg);
+    if (rc != SQLITE_OK) {
+      fprintf(stderr, "SQLite BEGIN error: %s\n", err_msg); // TODO:
+      sqlite3_free(err_msg);
+      return -1;
+    }
+    sqlite->in_transaction = true;
+  }
+
+  // Reset statement for new row
+  if (sqlite_reset_stmt(sqlite) != 0)
+    return -1;
+
+  // Reset column tracking
+  sqlite->current_column = 0;
+  sqlite->is_first_column = true;
+  sqlite->in_object = true;
+
+  (void)name; // We don't care about name
+
+  return 0;
+}
+
+static int sqlite_end_object_impl(exporter_t *self) {
+  sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
+  if (!sqlite || !sqlite->db || !sqlite->stmt)
+    return -1;
+
+  // Execute the prepared statement
+  int rc = sqlite3_step(sqlite->stmt);
+  if (rc != SQLITE_DONE) {
+    fprintf(stderr, "SQLite step error: %s\n",
+            sqlite3_errmsg(sqlite->db)); // TODO:
+    return -1;
+  }
+
+  sqlite->in_object = false;
+
+  // Note: Don't reset statement here - it will be reset on next begin_object
+  // This allows the statement to be reused efficiently
+
+  return 0;
+}
 
 sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
                                          const char *column_names) {
