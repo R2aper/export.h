@@ -70,6 +70,8 @@ typedef struct exporter_t {
 
 } exporter_t;
 
+/*------------------------CSV EXPORTER-----------------------*/
+
 typedef struct csv_exporter_t {
   exporter_t base;
   FILE *output;
@@ -125,6 +127,10 @@ int csv_exporter_set_csv_header(csv_exporter_t *csv, const char *csv_header);
  */
 int csv_exporter_set_output(csv_exporter_t *csv, FILE *file);
 
+/*------------------------CSV EXPORTER-----------------------*/
+
+/*-----------------------JSON EXPORTER-----------------------*/
+
 typedef struct json_exporter_t {
   exporter_t base;
   FILE *output;
@@ -134,7 +140,7 @@ typedef struct json_exporter_t {
   bool *level_first;
   bool pretty; ///<- if true — pretty-print JSON (2-space indent + newlines)
   bool jsonl; ///<- if true — JSONL mode (each object on separate line, no outer
-              ///<array)
+              ///< array)
 
 } json_exporter_t;
 
@@ -181,6 +187,37 @@ int json_exporter_set_jsonl(json_exporter_t *json, bool jsonl);
  * @return 0 on success, -1 on error (e.g. json or file is NULL)
  */
 int json_exporter_set_output(json_exporter_t *json, FILE *file);
+
+/*-----------------------JSON EXPORTER-----------------------*/
+
+/*----------------------SQLITE EXPORTER----------------------*/
+
+#ifdef SQLITE_EXPORT
+
+typedef struct sqlite3 sqlite3;
+typedef struct sqlite3_stmt sqlite3_stmt;
+
+typedef struct sqlite_exporter_t {
+  exporter_t base;          ///
+  sqlite3 *db;              ///< SQLite database connection
+  sqlite3_stmt *stmt;       ///< Prepared INSERT statement
+  const char *table_name;   ///
+  const char *column_names; ///< Semicolon-separated column names
+  int column_count;         ///
+  int current_column;       ///< Current column index being filled
+  bool in_object;           ///
+  bool is_first_column;     ///
+  bool in_transaction;      ///
+  bool table_created;       ///
+
+} sqlite_exporter_t;
+
+sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
+                                         const char *column_names);
+
+#endif
+
+/*----------------------SQLITE EXPORTER----------------------*/
 
 #ifdef EXPORT_IMPLEMENTATION
 
@@ -837,6 +874,58 @@ int json_exporter_set_output(json_exporter_t *json, FILE *file) {
 }
 
 /*-----------------------JSON EXPORTER-----------------------*/
+
+/*----------------------SQLITE EXPORTER----------------------*/
+
+#ifdef SQLITE_EXPORT
+
+#include <sqlite3.h>
+
+sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
+                                         const char *column_names) {
+
+  sqlite_exporter_t sqlite = {0};
+
+  sqlite.db = db;
+  sqlite.table_name = table_name;
+  sqlite.column_names = column_names;
+  sqlite.in_object = false;
+  sqlite.is_first_column = true;
+  sqlite.stmt = NULL;
+  sqlite.column_count = 0;
+  sqlite.current_column = 0;
+  sqlite.table_created = false;
+  sqlite.in_transaction = false;
+
+  // TODO:
+  sqlite.base.begin_object = NULL;
+  sqlite.base.end_object = NULL;
+  sqlite.base.write_int = NULL;
+  sqlite.base.write_double = NULL;
+  sqlite.base.write_string = NULL;
+  sqlite.base.write_bool = NULL;
+  sqlite.base.write_null = NULL;
+  sqlite.base.begin_array = NULL;
+  sqlite.base.end_array = NULL;
+  sqlite.base.flush = NULL;
+  sqlite.base.destroy = NULL;
+
+  // Parse column_names to count columns
+  if (column_names) {
+    int col_count = 1;
+    for (const char *p = column_names; *p; ++p) {
+      if (*p == ';')
+        col_count++;
+    }
+    sqlite.column_count = col_count;
+  }
+
+  return sqlite;
+}
+
+#endif // SQLITE_EXPORT
+
+/*----------------------SQLITE EXPORTER----------------------*/
 
 #endif // EXPORT_IMPLEMENTATION
 
