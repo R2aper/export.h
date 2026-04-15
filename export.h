@@ -2,7 +2,6 @@
 #define EXPORT_H
 
 // TODO:
-// - SQLITE
 // - Raw format
 // - Errors handling
 
@@ -1432,6 +1431,19 @@ static void sqlite_destroy_impl(exporter_t *self) {
   }
 }
 
+static int sqlite_begin_array_impl(exporter_t *self, const char *key) {
+  (void)self;
+  (void)key;
+  // NOTE: Array serialization not supported in SQLite
+  return -1;
+}
+
+static int sqlite_end_array_impl(exporter_t *self) {
+  (void)self;
+  // NOTE: Array serialization not supported in SQLite
+  return -1;
+}
+
 sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
                                          const char *column_names) {
 
@@ -1450,8 +1462,8 @@ sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
 
   sqlite.base.begin_object = sqlite_begin_object_impl;
   sqlite.base.end_object = sqlite_end_object_impl;
-  sqlite.base.begin_array = NULL;
-  sqlite.base.end_array = NULL;
+  sqlite.base.begin_array = sqlite_begin_array_impl;
+  sqlite.base.end_array = sqlite_end_array_impl;
   sqlite.base.write_int = sqlite_write_int_impl;
   sqlite.base.write_double = sqlite_write_double_impl;
   sqlite.base.write_string = sqlite_write_string_impl;
