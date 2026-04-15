@@ -212,6 +212,7 @@ typedef struct sqlite_exporter_t {
 
 } sqlite_exporter_t;
 
+// NOTE: column_names = "Name1;Name2"
 sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
                                          const char *column_names);
 
@@ -899,10 +900,10 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
   const char *cols = sqlite->column_names;
   size_t cols_len = strlen(cols);
 
-  // TODO:
   //  Estimate buffer size: "CREATE TABLE IF NOT EXISTS " + table + " (" +
   //  cols*10 + ");"
-  sql_len = 64 + strlen(sqlite->table_name) + cols_len * 16;
+  sql_len = strlen("CREATE TABLE IF NOT EXISTS ") + strlen(sqlite->table_name) +
+            cols_len * 16;
   sql = (char *)malloc(sql_len);
   if (!sql)
     return -1;
@@ -910,7 +911,7 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
   // Start CREATE TABLE statement
   int offset = snprintf(sql, sql_len, "CREATE TABLE IF NOT EXISTS %s (",
                         sqlite->table_name);
-  if (offset < 0) {
+  if (offset < 0 || (size_t)offset >= sql_len) {
     free(sql);
     return -1;
   }
@@ -920,41 +921,69 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
   const char *end = cols;
   bool first_col = true;
 
-  while (1) {
-    if (*end == ';' || *end == '\0') {
+  while (*end) {
+    if (*end == ';') {
       size_t col_len = (size_t)(end - start);
 
-      if (!first_col) {
-        offset = snprintf(sql + offset, sql_len - offset, ", ");
-        if (offset < 0) {
+      // Skip empty column names (e.g., trailing semicolon)
+      if (col_len > 0) {
+        if (!first_col) {
+          int written = snprintf(sql + offset, sql_len - offset, ", ");
+          if (written < 0 || (size_t)(offset + written) >= sql_len) {
+            free(sql);
+            return -1;
+          }
+          offset += written;
+        }
+
+        // Write column name as TEXT type
+        int written = snprintf(sql + offset, sql_len - offset, "%.*s TEXT",
+                               (int)col_len, start);
+        if (written < 0 || (size_t)(offset + written) >= sql_len) {
           free(sql);
           return -1;
         }
+        offset += written;
+
+        first_col = false;
       }
 
-      // Write column name as TEXT type
-      offset = snprintf(sql + offset, sql_len - offset, "%.*s TEXT",
-                        (int)col_len, start);
-      if (offset < 0) {
-        free(sql);
-        return -1;
-      }
-
-      first_col = false;
-
-      if (*end == '\0')
-        break;
       start = end + 1;
     }
     end++;
   }
 
+  // Handle last column (if not ending with semicolon or if there's content
+  // after last semicolon)
+  {
+    size_t col_len = (size_t)(end - start);
+    if (col_len > 0) {
+      if (!first_col) {
+        int written = snprintf(sql + offset, sql_len - offset, ", ");
+        if (written < 0 || (size_t)(offset + written) >= sql_len) {
+          free(sql);
+          return -1;
+        }
+        offset += written;
+      }
+
+      int written = snprintf(sql + offset, sql_len - offset, "%.*s TEXT",
+                             (int)col_len, start);
+      if (written < 0 || (size_t)(offset + written) >= sql_len) {
+        free(sql);
+        return -1;
+      }
+      offset += written;
+    }
+  }
+
   // Close statement
-  offset = snprintf(sql + offset, sql_len - offset, ")");
-  if (offset < 0) {
+  int written = snprintf(sql + offset, sql_len - offset, ")");
+  if (written < 0 || (size_t)(offset + written) >= sql_len) {
     free(sql);
     return -1;
   }
+  offset += written;
 
   // Execute CREATE TABLE
   char *err_msg = NULL;
@@ -981,26 +1010,37 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
     return 0;
 
   // Build INSERT statement: INSERT INTO table (col1, col2, ...) VALUES (?, ?,
-  // ...) Count columns first
-  int col_count = 1;
-  for (const char *p = sqlite->column_names; *p; ++p) {
-    if (*p == ';')
-      col_count++;
+  // ...) Count columns first (ignore empty trailing segments after semicolons)
+  int col_count = 0;
+  const char *p = sqlite->column_names;
+  if (*p) { // Non-empty string
+    col_count = 1;
+    while (*p) {
+      if (*p == ';') {
+        // Only count if there's content after the semicolon
+        if (*(p + 1) != '\0')
+          col_count++;
+      }
+      p++;
+    }
+    // Check for trailing semicolon - don't count empty segment
+    if (*(p - 1) == ';')
+      col_count--;
   }
 
   sqlite->column_count = col_count;
 
-  // TODO:
   // Estimate buffer size
   size_t cols_len = strlen(sqlite->column_names);
-  size_t sql_len = 64 + strlen(sqlite->table_name) + cols_len + col_count * 4;
+  size_t sql_len = strlen("INSERT INTO ") + strlen(sqlite->table_name) +
+                   cols_len + col_count * 4;
   char *sql = (char *)malloc(sql_len);
   if (!sql)
     return -1;
 
   //  Start: INSERT INTO table (
   int offset = snprintf(sql, sql_len, "INSERT INTO %s (", sqlite->table_name);
-  if (offset < 0) {
+  if (offset < 0 || (size_t)offset >= sql_len) {
     free(sql);
     return -1;
   }
@@ -1010,61 +1050,90 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
   const char *end = sqlite->column_names;
   bool first = true;
 
-  while (1) {
-    if (*end == ';' || *end == '\0') {
+  while (*end) {
+    if (*end == ';') {
       size_t col_len = (size_t)(end - start);
 
-      if (!first) {
-        offset = snprintf(sql + offset, sql_len - offset, ", ");
-        if (offset < 0) {
+      if (col_len > 0) {
+        if (!first) {
+          int written = snprintf(sql + offset, sql_len - offset, ", ");
+          if (written < 0 || (size_t)(offset + written) >= sql_len) {
+            free(sql);
+            return -1;
+          }
+          offset += written;
+        }
+
+        int written = snprintf(sql + offset, sql_len - offset, "%.*s",
+                               (int)col_len, start);
+        if (written < 0 || (size_t)(offset + written) >= sql_len) {
           free(sql);
           return -1;
         }
+        offset += written;
+
+        first = false;
       }
 
-      offset =
-          snprintf(sql + offset, sql_len - offset, "%.*s", (int)col_len, start);
-      if (offset < 0) {
-        free(sql);
-        return -1;
-      }
-
-      first = false;
-
-      if (*end == '\0')
-        break;
       start = end + 1;
     }
     end++;
   }
 
-  // VALUES part
-  offset = snprintf(sql + offset, sql_len - offset, ") VALUES (");
-  if (offset < 0) {
-    free(sql);
-    return -1;
-  }
+  // Handle last column
+  {
+    size_t col_len = (size_t)(end - start);
+    if (col_len > 0) {
+      if (!first) {
+        int written = snprintf(sql + offset, sql_len - offset, ", ");
+        if (written < 0 || (size_t)(offset + written) >= sql_len) {
+          free(sql);
+          return -1;
+        }
+        offset += written;
+      }
 
-  for (int i = 0; i < col_count; ++i) {
-    if (i > 0) {
-      offset = snprintf(sql + offset, sql_len - offset, ", ");
-      if (offset < 0) {
+      int written =
+          snprintf(sql + offset, sql_len - offset, "%.*s", (int)col_len, start);
+      if (written < 0 || (size_t)(offset + written) >= sql_len) {
         free(sql);
         return -1;
       }
-    }
-    offset = snprintf(sql + offset, sql_len - offset, "?");
-    if (offset < 0) {
-      free(sql);
-      return -1;
+      offset += written;
     }
   }
 
-  offset = snprintf(sql + offset, sql_len - offset, ")");
-  if (offset < 0) {
+  // VALUES part
+  int written = snprintf(sql + offset, sql_len - offset, ") VALUES (");
+  if (written < 0 || (size_t)(offset + written) >= sql_len) {
     free(sql);
     return -1;
   }
+  offset += written;
+
+  for (int i = 0; i < col_count; ++i) {
+    if (i > 0) {
+      written = snprintf(sql + offset, sql_len - offset, ", ");
+      if (written < 0 || (size_t)(offset + written) >= sql_len) {
+        free(sql);
+        return -1;
+      }
+      offset += written;
+    }
+    written = snprintf(sql + offset, sql_len - offset, "?");
+    if (written < 0 || (size_t)(offset + written) >= sql_len) {
+      free(sql);
+      return -1;
+    }
+    offset += written;
+  }
+
+  written = snprintf(sql + offset, sql_len - offset, ")");
+  if (written < 0 || (size_t)(offset + written) >= sql_len) {
+    free(sql);
+    return -1;
+  }
+  offset += written;
 
   // Prepare statement
   int rc = sqlite3_prepare_v2(sqlite->db, sql, -1, &sqlite->stmt, NULL);
@@ -1178,9 +1247,8 @@ sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
   sqlite.table_created = false;
   sqlite.in_transaction = false;
 
-  // TODO:
-  sqlite.base.begin_object = NULL;
-  sqlite.base.end_object = NULL;
+  sqlite.base.begin_object = sqlite_begin_object_impl;
+  sqlite.base.end_object = sqlite_end_object_impl;
   sqlite.base.write_int = NULL;
   sqlite.base.write_double = NULL;
   sqlite.base.write_string = NULL;
@@ -1191,12 +1259,23 @@ sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
   sqlite.base.flush = NULL;
   sqlite.base.destroy = NULL;
 
-  // Parse column_names to count columns
+  // Parse column_names to count columns (ignore empty trailing segments)
   if (column_names) {
-    int col_count = 1;
-    for (const char *p = column_names; *p; ++p) {
-      if (*p == ';')
-        col_count++;
+    int col_count = 0;
+    const char *p = column_names;
+    if (*p) { // Non-empty string
+      col_count = 1;
+      while (*p) {
+        if (*p == ';') {
+          // Only count if there's content after the semicolon
+          if (*(p + 1) != '\0')
+            col_count++;
+        }
+        p++;
+      }
+      // Check for trailing semicolon - don't count empty segment
+      if (*(p - 1) == ';')
+        col_count--;
     }
     sqlite.column_count = col_count;
   }
