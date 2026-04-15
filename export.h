@@ -1364,6 +1364,26 @@ static int sqlite_write_null_impl(exporter_t *self, const char *key) {
   return 0;
 }
 
+static int sqlite_flush_impl(exporter_t *self) {
+  sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
+  if (!sqlite || !sqlite->db)
+    return -1;
+
+  // Commit any pending transaction
+  if (sqlite->in_transaction) {
+    char *err_msg = NULL;
+    int rc = sqlite3_exec(sqlite->db, "COMMIT", NULL, NULL, &err_msg);
+    if (rc != SQLITE_OK) {
+      fprintf(stderr, "SQLite COMMIT error: %s\n", err_msg);
+      sqlite3_free(err_msg);
+      return -1;
+    }
+    sqlite->in_transaction = false;
+  }
+
+  return 0;
+}
+
 static void sqlite_destroy_impl(exporter_t *self) {
   sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
   if (!sqlite)
@@ -1400,6 +1420,7 @@ sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
   sqlite.base.write_string = sqlite_write_string_impl;
   sqlite.base.write_bool = sqlite_write_bool_impl;
   sqlite.base.write_null = sqlite_write_null_impl;
+  sqlite.base.flush = sqlite_flush_impl;
   sqlite.base.destroy = sqlite_destroy_impl;
 
   // Parse column_names to count columns (ignore empty trailing segments)
