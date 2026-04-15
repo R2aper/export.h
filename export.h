@@ -1030,18 +1030,26 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
 
   sqlite->column_count = col_count;
 
-  // Estimate buffer size
+  // Estimate buffer size: need extra space for ", " between columns and "?", "
+  // in VALUES
   size_t cols_len = strlen(sqlite->column_names);
   size_t sql_len = strlen("INSERT INTO ") + strlen(sqlite->table_name) +
-                   cols_len + col_count * 4;
+                   cols_len * 2 + (size_t)col_count * 6 + 32;
   char *sql = (char *)malloc(sql_len);
   if (!sql)
     return -1;
 
   //  Start: INSERT INTO table (
   int offset = snprintf(sql, sql_len, "INSERT INTO %s (", sqlite->table_name);
-  if (offset < 0 || (size_t)offset >= sql_len) {
+  if (offset < 0) {
     free(sql);
+    fprintf(stderr, "SQLite snprintf error: offset=%d\n", offset);
+    return -1;
+  }
+  if ((size_t)offset >= sql_len) {
+    free(sql);
+    fprintf(stderr, "SQLite buffer too small: need %d, have %zu\n", offset + 1,
+            sql_len);
     return -1;
   }
 
@@ -1176,12 +1184,18 @@ static int sqlite_begin_object_impl(exporter_t *self, const char *name) {
     return -1;
 
   // Ensure table exists
-  if (sqlite_ensure_table_created(sqlite) != 0)
+  int create_rc = sqlite_ensure_table_created(sqlite);
+  if (create_rc != 0) {
+    fprintf(stderr, "SQLite ensure_table_created failed\n"); // TODO:
     return -1;
+  }
 
   // Prepare INSERT statement if not already
-  if (sqlite_prepare_insert_stmt(sqlite) != 0)
+  int prep_rc = sqlite_prepare_insert_stmt(sqlite);
+  if (prep_rc != 0) {
+    fprintf(stderr, "SQLite prepare_insert_stmt failed\n"); // TODO:
     return -1;
+  }
 
   // Begin transaction if not active
   if (!sqlite->in_transaction) {
@@ -1218,15 +1232,12 @@ static int sqlite_end_object_impl(exporter_t *self) {
   // Execute the prepared statement
   int rc = sqlite3_step(sqlite->stmt);
   if (rc != SQLITE_DONE) {
-    fprintf(stderr, "SQLite step error: %s\n",
-            sqlite3_errmsg(sqlite->db)); // TODO:
+    fprintf(stderr, "SQLite step error: %s (rc=%d)\n",
+            sqlite3_errmsg(sqlite->db), rc); // TODO:
     return -1;
   }
 
   sqlite->in_object = false;
-
-  // Note: Don't reset statement here - it will be reset on next begin_object
-  // This allows the statement to be reused efficiently
 
   return 0;
 }
