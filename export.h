@@ -1393,9 +1393,8 @@ sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
 
   sqlite.base.begin_object = sqlite_begin_object_impl;
   sqlite.base.end_object = sqlite_end_object_impl;
-  sqlite.base.write_int = NULL;
-  sqlite.base.begin_object = sqlite_begin_object_impl;
-  sqlite.base.end_object = sqlite_end_object_impl;
+  sqlite.base.begin_array = NULL;
+  sqlite.base.end_array = NULL;
   sqlite.base.write_int = sqlite_write_int_impl;
   sqlite.base.write_double = sqlite_write_double_impl;
   sqlite.base.write_string = sqlite_write_string_impl;
