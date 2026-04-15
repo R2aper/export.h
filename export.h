@@ -1242,6 +1242,128 @@ static int sqlite_end_object_impl(exporter_t *self) {
   return 0;
 }
 
+static int sqlite_write_int_impl(exporter_t *self, const char *key,
+                                 int64_t value) {
+  sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
+  if (!sqlite || !sqlite->db || !sqlite->stmt || !sqlite->in_object)
+    return -1;
+
+  if (sqlite->current_column >= sqlite->column_count)
+    return -1;
+
+  int rc = sqlite3_bind_int64(sqlite->stmt, sqlite->current_column + 1, value);
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "SQLite bind_int64 error: %s\n",
+            sqlite3_errmsg(sqlite->db)); // TODO:
+    return -1;
+  }
+
+  sqlite->current_column++;
+  sqlite->is_first_column = false;
+
+  (void)key;
+
+  return 0;
+}
+
+static int sqlite_write_double_impl(exporter_t *self, const char *key,
+                                    double value) {
+  sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
+  if (!sqlite || !sqlite->db || !sqlite->stmt || !sqlite->in_object)
+    return -1;
+
+  if (sqlite->current_column >= sqlite->column_count)
+    return -1;
+
+  int rc = sqlite3_bind_double(sqlite->stmt, sqlite->current_column + 1, value);
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "SQLite bind_double error: %s\n",
+            sqlite3_errmsg(sqlite->db)); // TODO:
+    return -1;
+  }
+
+  sqlite->current_column++;
+  sqlite->is_first_column = false;
+
+  (void)key;
+
+  return 0;
+}
+
+static int sqlite_write_string_impl(exporter_t *self, const char *key,
+                                    const char *value) {
+  sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
+  if (!sqlite || !sqlite->db || !sqlite->stmt || !sqlite->in_object)
+    return -1;
+
+  if (sqlite->current_column >= sqlite->column_count)
+    return -1;
+
+  int rc = sqlite3_bind_text(sqlite->stmt, sqlite->current_column + 1,
+                             value ? value : "", -1, SQLITE_STATIC);
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "SQLite bind_text error: %s\n",
+            sqlite3_errmsg(sqlite->db)); // TODO:
+    return -1;
+  }
+
+  sqlite->current_column++;
+  sqlite->is_first_column = false;
+
+  (void)key;
+
+  return 0;
+}
+
+static int sqlite_write_bool_impl(exporter_t *self, const char *key,
+                                  bool value) {
+  sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
+  if (!sqlite || !sqlite->db || !sqlite->stmt || !sqlite->in_object)
+    return -1;
+
+  if (sqlite->current_column >= sqlite->column_count)
+    return -1;
+
+  // SQLite stores booleans as integers (0 or 1)
+  int rc =
+      sqlite3_bind_int(sqlite->stmt, sqlite->current_column + 1, value ? 1 : 0);
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "SQLite bind_int error: %s\n",
+            sqlite3_errmsg(sqlite->db)); // TODO:
+    return -1;
+  }
+
+  sqlite->current_column++;
+  sqlite->is_first_column = false;
+
+  (void)key;
+
+  return 0;
+}
+
+static int sqlite_write_null_impl(exporter_t *self, const char *key) {
+  sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
+  if (!sqlite || !sqlite->db || !sqlite->stmt || !sqlite->in_object)
+    return -1;
+
+  if (sqlite->current_column >= sqlite->column_count)
+    return -1;
+
+  int rc = sqlite3_bind_null(sqlite->stmt, sqlite->current_column + 1);
+  if (rc != SQLITE_OK) {
+    fprintf(stderr, "SQLite bind_null error: %s\n",
+            sqlite3_errmsg(sqlite->db)); // TODO:
+    return -1;
+  }
+
+  sqlite->current_column++;
+  sqlite->is_first_column = false;
+
+  (void)key;
+
+  return 0;
+}
+
 static void sqlite_destroy_impl(exporter_t *self) {
   sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
   if (!sqlite)
@@ -1272,13 +1394,13 @@ sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
   sqlite.base.begin_object = sqlite_begin_object_impl;
   sqlite.base.end_object = sqlite_end_object_impl;
   sqlite.base.write_int = NULL;
-  sqlite.base.write_double = NULL;
-  sqlite.base.write_string = NULL;
-  sqlite.base.write_bool = NULL;
-  sqlite.base.write_null = NULL;
-  sqlite.base.begin_array = NULL;
-  sqlite.base.end_array = NULL;
-  sqlite.base.flush = NULL;
+  sqlite.base.begin_object = sqlite_begin_object_impl;
+  sqlite.base.end_object = sqlite_end_object_impl;
+  sqlite.base.write_int = sqlite_write_int_impl;
+  sqlite.base.write_double = sqlite_write_double_impl;
+  sqlite.base.write_string = sqlite_write_string_impl;
+  sqlite.base.write_bool = sqlite_write_bool_impl;
+  sqlite.base.write_null = sqlite_write_null_impl;
   sqlite.base.destroy = sqlite_destroy_impl;
 
   // Parse column_names to count columns (ignore empty trailing segments)
