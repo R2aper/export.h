@@ -269,16 +269,8 @@ static inline int csv_write_quoted_string(FILE *out, const char *value) {
   return 0;
 }
 
-static int csv_flush_impl(exporter_t *self) {
-  csv_exporter_t *csv = (csv_exporter_t *)self;
-  if (!csv || !csv->output)
-    return -1;
-
-  return fflush(csv->output);
-}
-
 // Write csv header (only once if write_header_once == true)
-int csv_begin_object_impl(exporter_t *self, const char *name) {
+static int csv_begin_object_impl(exporter_t *self, const char *name) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
   if (!csv || !csv->output)
     return -1;
@@ -295,7 +287,7 @@ int csv_begin_object_impl(exporter_t *self, const char *name) {
 }
 
 // Add new line
-int csv_end_object_impl(exporter_t *self) {
+static int csv_end_object_impl(exporter_t *self) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
   if (!csv || !csv->output)
     return -1;
@@ -416,6 +408,14 @@ static int csv_end_array_impl(exporter_t *self) {
   return 0;
 }
 
+static int csv_flush_impl(exporter_t *self) {
+  csv_exporter_t *csv = (csv_exporter_t *)self;
+  if (!csv || !csv->output)
+    return -1;
+
+  return fflush(csv->output);
+}
+
 // dummy function
 static void csv_destroy_impl(exporter_t *self) { (void)self; }
 
@@ -520,7 +520,7 @@ static inline void json_escape_string(FILE *out, const char *str) {
 }
 
 /// Prints \n + 2-space indent  * level
-static int json_pretty_indent(json_exporter_t *json, int level) {
+static inline int json_pretty_indent(json_exporter_t *json, int level) {
   if (!json->pretty)
     return 0;
 
@@ -536,7 +536,7 @@ static int json_pretty_indent(json_exporter_t *json, int level) {
   return 0;
 }
 
-static int json_grow_stack(json_exporter_t *json) {
+static inline int json_grow_stack(json_exporter_t *json) {
   if (json->depth < json->capacity)
     return 0;
 
@@ -558,14 +558,6 @@ static int json_grow_stack(json_exporter_t *json) {
   json->capacity = new_cap;
 
   return 0;
-}
-
-static int json_flush_impl(exporter_t *self) {
-  json_exporter_t *json = (json_exporter_t *)self;
-  if (!json || !json->output)
-    return -1;
-
-  return fflush(json->output);
 }
 
 static int json_begin_object_impl(exporter_t *self, const char *name) {
@@ -822,6 +814,14 @@ static int json_end_array_impl(exporter_t *self) {
   json->depth--;
 
   return 0;
+}
+
+static int json_flush_impl(exporter_t *self) {
+  json_exporter_t *json = (json_exporter_t *)self;
+  if (!json || !json->output)
+    return -1;
+
+  return fflush(json->output);
 }
 
 static void json_destroy_impl(exporter_t *self) {
@@ -1395,6 +1395,19 @@ static int sqlite_write_null_impl(exporter_t *self, const char *key) {
   return 0;
 }
 
+static int sqlite_begin_array_impl(exporter_t *self, const char *key) {
+  (void)self;
+  (void)key;
+  // NOTE: Array serialization not supported in SQLite
+  return -1;
+}
+
+static int sqlite_end_array_impl(exporter_t *self) {
+  (void)self;
+  // NOTE: Array serialization not supported in SQLite
+  return -1;
+}
+
 static int sqlite_flush_impl(exporter_t *self) {
   sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
   if (!sqlite || !sqlite->db)
@@ -1429,19 +1442,6 @@ static void sqlite_destroy_impl(exporter_t *self) {
     sqlite3_finalize(sqlite->stmt);
     sqlite->stmt = NULL;
   }
-}
-
-static int sqlite_begin_array_impl(exporter_t *self, const char *key) {
-  (void)self;
-  (void)key;
-  // NOTE: Array serialization not supported in SQLite
-  return -1;
-}
-
-static int sqlite_end_array_impl(exporter_t *self) {
-  (void)self;
-  // NOTE: Array serialization not supported in SQLite
-  return -1;
 }
 
 sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
