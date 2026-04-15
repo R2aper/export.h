@@ -205,6 +205,7 @@ typedef struct sqlite_exporter_t {
   const char *column_names; ///< Semicolon-separated column names
   int column_count;         ///
   int current_column;       ///< Current column index being filled
+  bool auto_commit;         ///< If true, commit after each object (default)
   bool in_object;           ///
   bool is_first_column;     ///
   bool in_transaction;      ///
@@ -212,9 +213,28 @@ typedef struct sqlite_exporter_t {
 
 } sqlite_exporter_t;
 
-// NOTE: column_names = "Name1;Name2"
+/**
+ * @brief Creates a new exporter in SQLite format
+ * @note  column_names should be looks like: "Name1;Name2"
+ *
+ * @param db Open sqlite3 database
+ * @param table_name Name of table
+ * @param column_names List of column names
+ */
 sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
                                          const char *column_names);
+
+/**
+ * @brief Sets auto-commit mode
+ *
+ * @param sqlite Pointer to sqlite_exporter_t
+ * @param auto_commit if true (default) — commit after each end_object();
+ *                    if false — caller must commit via flush() manually
+ *
+ * @return 0 on success, -1 on error
+ */
+int sqlite_exporter_set_auto_commit(sqlite_exporter_t *sqlite,
+                                    bool auto_commit);
 
 #endif
 
@@ -1237,6 +1257,18 @@ static int sqlite_end_object_impl(exporter_t *self) {
     return -1;
   }
 
+  // Commit immediately if auto_commit mode is enabled
+  if (sqlite->auto_commit && sqlite->in_transaction) {
+    char *err_msg = NULL;
+    rc = sqlite3_exec(sqlite->db, "COMMIT", NULL, NULL, &err_msg);
+    if (rc != SQLITE_OK) {
+      fprintf(stderr, "SQLite COMMIT error: %s\n", err_msg);
+      sqlite3_free(err_msg);
+      return -1;
+    }
+    sqlite->in_transaction = false;
+  }
+
   sqlite->in_object = false;
 
   return 0;
@@ -1389,6 +1421,11 @@ static void sqlite_destroy_impl(exporter_t *self) {
   if (!sqlite)
     return;
 
+  // Commit any pending transaction before destroying
+  if (sqlite->in_transaction) {
+    sqlite_flush_impl(&sqlite->base);
+  }
+
   if (sqlite->stmt) {
     sqlite3_finalize(sqlite->stmt);
     sqlite->stmt = NULL;
@@ -1445,6 +1482,16 @@ sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
   }
 
   return sqlite;
+}
+
+int sqlite_exporter_set_auto_commit(sqlite_exporter_t *sqlite,
+                                    bool auto_commit) {
+  if (!sqlite)
+    return -1;
+
+  sqlite->auto_commit = auto_commit;
+
+  return 0;
 }
 
 #endif // SQLITE_EXPORT
