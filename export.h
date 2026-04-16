@@ -72,6 +72,11 @@ const char *export_strerror(export_error_code_t code);
  */
 const char *export_get_last_error(void);
 
+static inline void export_clear_error(void) {
+  export_last_error = EXPORT_OK;
+  export_last_error_msg[0] = '\0';
+}
+
 /*----------------------ERROR HANDLING-----------------------*/
 
 typedef struct exporter_t exporter_t;
