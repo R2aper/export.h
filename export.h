@@ -72,6 +72,7 @@ const char *export_strerror(export_error_code_t code);
  */
 const char *export_get_last_error(void);
 
+/// @brief Clear error
 static inline void export_clear_error(void) {
   export_last_error = EXPORT_OK;
   export_last_error_msg[0] = '\0';
@@ -994,7 +995,7 @@ static int json_write_string_impl(exporter_t *self, const char *key,
     }
   }
 
-  if (!json_escape_string(json->output, value))
+  if (json_escape_string(json->output, value) != 0)
     return -1;
 
   json->level_first[curr_level] = false;
