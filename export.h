@@ -1838,13 +1838,15 @@ static int sqlite_write_null_impl(exporter_t *self, const char *key) {
 static int sqlite_begin_array_impl(exporter_t *self, const char *key) {
   (void)self;
   (void)key;
-  // NOTE: Array serialization not supported in SQLite
+  export_set_error(EXPORT_ERR_SQLITE,
+                   "Array serialization not supported in SQLite");
   return -1;
 }
 
 static int sqlite_end_array_impl(exporter_t *self) {
   (void)self;
-  // NOTE: Array serialization not supported in SQLite
+  export_set_error(EXPORT_ERR_SQLITE,
+                   "Array serialization not supported in SQLite");
   return -1;
 }
 
