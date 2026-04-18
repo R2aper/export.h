@@ -131,7 +131,7 @@ export_get_last_error()); export_clear_error(); // Reset error
 #define EXPORT_THREAD_LOCAL __thread
 #else
 #define EXPORT_THREAD_LOCAL
-#pragma message(                                                               \
+#pragma message(                                                                                   \
     "Thread-local storage not supported on this platform - error handling is not thread-safe")
 #endif
 
@@ -142,9 +142,9 @@ typedef enum {
   EXPORT_ERR_IO,            ///< File I/O error (EOF, fwrite/fflush failed)
   EXPORT_ERR_MEMORY,        ///< Memory allocation failed (malloc/realloc)
   EXPORT_ERR_SQLITE,        ///< SQLite database error
-  EXPORT_ERR_STATE, ///< Invalid exporter state (e.g., end_object without ///<
-                    ///< begin_object)
-  EXPORT_ERR_SERIALIZE, ///< Serialization error
+  EXPORT_ERR_STATE,         ///< Invalid exporter state (e.g., end_object without ///<
+                            ///< begin_object)
+  EXPORT_ERR_SERIALIZE,     ///< Serialization error
 
 } export_error_code_t;
 
@@ -267,8 +267,7 @@ typedef struct csv_exporter_t {
  * @param write_header_once if true, header is written only once (recommended
  * for multi-row CSV)
  */
-csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header,
-                                   bool write_header_once);
+csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header, bool write_header_once);
 
 /**
  * @brief Sets whether the CSV header should be written only once
@@ -279,8 +278,7 @@ csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header,
  *
  * @return 0 on success, -1 on error (e.g. csv is NULL)
  */
-int csv_exporter_set_write_header_once(csv_exporter_t *csv,
-                                       bool write_header_once);
+int csv_exporter_set_write_header_once(csv_exporter_t *csv, bool write_header_once);
 
 /**
  * @brief Sets the CSV header string
@@ -316,9 +314,8 @@ typedef struct json_exporter_t {
   bool *context_is_object;
   bool *level_first;
   bool pretty; ///<- if true - pretty-print JSON (2-space indent + newlines)
-  bool
-      jsonl; ///<- if true  - JSONL mode (each object on separate line, no outer
-             ///< array)
+  bool jsonl;  ///<- if true  - JSONL mode (each object on separate line, no outer
+               ///< array)
 
 } json_exporter_t;
 
@@ -412,8 +409,7 @@ sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
  *
  * @return 0 on success, -1 on error
  */
-int sqlite_exporter_set_auto_commit(sqlite_exporter_t *sqlite,
-                                    bool auto_commit);
+int sqlite_exporter_set_auto_commit(sqlite_exporter_t *sqlite, bool auto_commit);
 
 #endif
 
@@ -506,8 +502,7 @@ static inline int csv_write_quoted_string(FILE *out, const char *value) {
 static int csv_begin_object_impl(exporter_t *self, const char *name) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
   if (!csv || !csv->output) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "CSV exporter or output is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "CSV exporter or output is NULL");
     return -1;
   }
 
@@ -530,8 +525,7 @@ static int csv_begin_object_impl(exporter_t *self, const char *name) {
 static int csv_end_object_impl(exporter_t *self) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
   if (!csv || !csv->output) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "CSV exporter or output is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "CSV exporter or output is NULL");
     return -1;
   }
 
@@ -544,12 +538,10 @@ static int csv_end_object_impl(exporter_t *self) {
   return 0;
 }
 
-static int csv_write_int_impl(exporter_t *self, const char *key,
-                              int64_t value) {
+static int csv_write_int_impl(exporter_t *self, const char *key, int64_t value) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
   if (!csv || !csv->output) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "CSV exporter or output is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "CSV exporter or output is NULL");
     return -1;
   }
 
@@ -572,12 +564,10 @@ static int csv_write_int_impl(exporter_t *self, const char *key,
   return 0;
 }
 
-static int csv_write_double_impl(exporter_t *self, const char *key,
-                                 double value) {
+static int csv_write_double_impl(exporter_t *self, const char *key, double value) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
   if (!csv || !csv->output) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "CSV exporter or output is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "CSV exporter or output is NULL");
     return -1;
   }
 
@@ -600,12 +590,10 @@ static int csv_write_double_impl(exporter_t *self, const char *key,
   return 0;
 }
 
-static int csv_write_string_impl(exporter_t *self, const char *key,
-                                 const char *value) {
+static int csv_write_string_impl(exporter_t *self, const char *key, const char *value) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
   if (!csv || !csv->output) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "CSV exporter or output is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "CSV exporter or output is NULL");
     return -1;
   }
 
@@ -626,8 +614,7 @@ static int csv_write_string_impl(exporter_t *self, const char *key,
 static int csv_write_bool_impl(exporter_t *self, const char *key, bool value) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
   if (!csv || !csv->output) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "CSV exporter or output is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "CSV exporter or output is NULL");
     return -1;
   }
 
@@ -653,8 +640,7 @@ static int csv_write_bool_impl(exporter_t *self, const char *key, bool value) {
 static int csv_write_null_impl(exporter_t *self, const char *key) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
   if (!csv || !csv->output) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "CSV exporter or output is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "CSV exporter or output is NULL");
     return -1;
   }
 
@@ -680,8 +666,7 @@ static int csv_write_null_impl(exporter_t *self, const char *key) {
 static int csv_begin_array_impl(exporter_t *self, const char *key) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
   if (!csv || !csv->output) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "CSV exporter or output is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "CSV exporter or output is NULL");
     return -1;
   }
 
@@ -708,8 +693,7 @@ static int csv_begin_array_impl(exporter_t *self, const char *key) {
 static int csv_end_array_impl(exporter_t *self) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
   if (!csv || !csv->output) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "CSV exporter or output is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "CSV exporter or output is NULL");
     return -1;
   }
 
@@ -727,8 +711,7 @@ static int csv_end_array_impl(exporter_t *self) {
 static int csv_flush_impl(exporter_t *self) {
   csv_exporter_t *csv = (csv_exporter_t *)self;
   if (!csv || !csv->output) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "CSV exporter or output is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "CSV exporter or output is NULL");
     return -1;
   }
 
@@ -742,8 +725,7 @@ static int csv_flush_impl(exporter_t *self) {
 // dummy function
 static void csv_destroy_impl(exporter_t *self) { (void)self; }
 
-csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header,
-                                   bool write_header_once) {
+csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header, bool write_header_once) {
   csv_exporter_t csv = {0};
 
   csv.output = file;
@@ -767,8 +749,7 @@ csv_exporter_t create_csv_exporter(FILE *file, const char *csv_header,
   return csv;
 }
 
-int csv_exporter_set_write_header_once(csv_exporter_t *csv,
-                                       bool write_header_once) {
+int csv_exporter_set_write_header_once(csv_exporter_t *csv, bool write_header_once) {
   if (!csv) {
     export_set_error(EXPORT_ERR_INVALID_PARAM, "CSV exporter is NULL");
     return -1;
@@ -910,16 +891,13 @@ static inline int json_grow_stack(json_exporter_t *json) {
 
   int new_cap = (json->capacity == 0) ? 8 : json->capacity * 2;
 
-  bool *new_ctx =
-      (bool *)realloc(json->context_is_object, (size_t)new_cap * sizeof(bool));
-  bool *new_fst =
-      (bool *)realloc(json->level_first, (size_t)new_cap * sizeof(bool));
+  bool *new_ctx = (bool *)realloc(json->context_is_object, (size_t)new_cap * sizeof(bool));
+  bool *new_fst = (bool *)realloc(json->level_first, (size_t)new_cap * sizeof(bool));
 
   if (!new_ctx || !new_fst) {
     free(new_ctx);
     free(new_fst);
-    export_set_error(EXPORT_ERR_MEMORY,
-                     "Failed to grow JSON stack (capacity=%d)", new_cap);
+    export_set_error(EXPORT_ERR_MEMORY, "Failed to grow JSON stack (capacity=%d)", new_cap);
     return -1;
   }
 
@@ -933,8 +911,7 @@ static inline int json_grow_stack(json_exporter_t *json) {
 static int json_begin_object_impl(exporter_t *self, const char *name) {
   json_exporter_t *json = (json_exporter_t *)self;
   if (!json || !json->output) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "JSON exporter or output is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "JSON exporter or output is NULL");
     return -1;
   }
 
@@ -969,8 +946,7 @@ static int json_begin_object_impl(exporter_t *self, const char *name) {
       return -1;
     }
     if (json->context_is_object[curr_level] && name != NULL) {
-      if (fprintf(json->output, "\"%s\":%s", name, json->pretty ? " " : "") <
-          0) {
+      if (fprintf(json->output, "\"%s\":%s", name, json->pretty ? " " : "") < 0) {
         export_set_error(EXPORT_ERR_IO, "Failed to write JSON key");
         return -1;
       }
@@ -996,8 +972,7 @@ static int json_begin_object_impl(exporter_t *self, const char *name) {
 static int json_end_object_impl(exporter_t *self) {
   json_exporter_t *json = (json_exporter_t *)self;
   if (!json || !json->output || json->depth == 0) {
-    export_set_error(EXPORT_ERR_STATE,
-                     "JSON exporter: end_object without begin_object");
+    export_set_error(EXPORT_ERR_STATE, "JSON exporter: end_object without begin_object");
     return -1;
   }
 
@@ -1029,12 +1004,10 @@ static int json_end_object_impl(exporter_t *self) {
   return 0;
 }
 
-static int json_write_int_impl(exporter_t *self, const char *key,
-                               int64_t value) {
+static int json_write_int_impl(exporter_t *self, const char *key, int64_t value) {
   json_exporter_t *json = (json_exporter_t *)self;
   if (!json || !json->output || json->depth == 0) {
-    export_set_error(EXPORT_ERR_STATE,
-                     "JSON exporter: write_int outside of object/array");
+    export_set_error(EXPORT_ERR_STATE, "JSON exporter: write_int outside of object/array");
     return -1;
   }
 
@@ -1067,12 +1040,10 @@ static int json_write_int_impl(exporter_t *self, const char *key,
   return 0;
 }
 
-static int json_write_double_impl(exporter_t *self, const char *key,
-                                  double value) {
+static int json_write_double_impl(exporter_t *self, const char *key, double value) {
   json_exporter_t *json = (json_exporter_t *)self;
   if (!json || !json->output || json->depth == 0) {
-    export_set_error(EXPORT_ERR_STATE,
-                     "JSON exporter: write_double outside of object/array");
+    export_set_error(EXPORT_ERR_STATE, "JSON exporter: write_double outside of object/array");
     return -1;
   }
 
@@ -1104,12 +1075,10 @@ static int json_write_double_impl(exporter_t *self, const char *key,
   return 0;
 }
 
-static int json_write_string_impl(exporter_t *self, const char *key,
-                                  const char *value) {
+static int json_write_string_impl(exporter_t *self, const char *key, const char *value) {
   json_exporter_t *json = (json_exporter_t *)self;
   if (!json || !json->output || json->depth == 0) {
-    export_set_error(EXPORT_ERR_STATE,
-                     "JSON exporter: write_string outside of object/array");
+    export_set_error(EXPORT_ERR_STATE, "JSON exporter: write_string outside of object/array");
     return -1;
   }
 
@@ -1143,8 +1112,7 @@ static int json_write_string_impl(exporter_t *self, const char *key,
 static int json_write_bool_impl(exporter_t *self, const char *key, bool value) {
   json_exporter_t *json = (json_exporter_t *)self;
   if (!json || !json->output || json->depth == 0) {
-    export_set_error(EXPORT_ERR_STATE,
-                     "JSON exporter: write_bool outside of object/array");
+    export_set_error(EXPORT_ERR_STATE, "JSON exporter: write_bool outside of object/array");
     return -1;
   }
 
@@ -1179,8 +1147,7 @@ static int json_write_bool_impl(exporter_t *self, const char *key, bool value) {
 static int json_write_null_impl(exporter_t *self, const char *key) {
   json_exporter_t *json = (json_exporter_t *)self;
   if (!json || !json->output || json->depth == 0) {
-    export_set_error(EXPORT_ERR_STATE,
-                     "JSON exporter: write_null outside of object/array");
+    export_set_error(EXPORT_ERR_STATE, "JSON exporter: write_null outside of object/array");
     return -1;
   }
 
@@ -1218,8 +1185,7 @@ static int json_write_null_impl(exporter_t *self, const char *key) {
 static int json_begin_array_impl(exporter_t *self, const char *key) {
   json_exporter_t *json = (json_exporter_t *)self;
   if (!json || !json->output) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "JSON exporter or output is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "JSON exporter or output is NULL");
     return -1;
   }
 
@@ -1238,8 +1204,7 @@ static int json_begin_array_impl(exporter_t *self, const char *key) {
     }
 
     if (json->context_is_object[curr_level] && key != NULL) {
-      if (fprintf(json->output, "\"%s\":%s", key, json->pretty ? " " : "") <
-          0) {
+      if (fprintf(json->output, "\"%s\":%s", key, json->pretty ? " " : "") < 0) {
         export_set_error(EXPORT_ERR_IO, "Failed to write JSON key");
         return -1;
       }
@@ -1265,8 +1230,7 @@ static int json_begin_array_impl(exporter_t *self, const char *key) {
 static int json_end_array_impl(exporter_t *self) {
   json_exporter_t *json = (json_exporter_t *)self;
   if (!json || !json->output || json->depth == 0) {
-    export_set_error(EXPORT_ERR_STATE,
-                     "JSON exporter: end_array without begin_array");
+    export_set_error(EXPORT_ERR_STATE, "JSON exporter: end_array without begin_array");
     return -1;
   }
 
@@ -1288,8 +1252,7 @@ static int json_end_array_impl(exporter_t *self) {
 static int json_flush_impl(exporter_t *self) {
   json_exporter_t *json = (json_exporter_t *)self;
   if (!json || !json->output) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "JSON exporter or output is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "JSON exporter or output is NULL");
     return -1;
   }
 
@@ -1388,8 +1351,7 @@ int json_exporter_set_output(json_exporter_t *json, FILE *file) {
 // Helper: Check if colum_names are in valid format
 static inline int validate_column_names(const char *column_names) {
   if (!column_names || !*column_names) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "Column names string is NULL or empty");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "Column names string is NULL or empty");
     return -1;
   }
 
@@ -1397,8 +1359,7 @@ static inline int validate_column_names(const char *column_names) {
 
   // Invalid first char
   if (*p == ';') {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "Invalid format: cannot start with ';'");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "Invalid format: cannot start with ';'");
     return -1;
   }
 
@@ -1410,15 +1371,13 @@ static inline int validate_column_names(const char *column_names) {
     // Current segment(Name or Type)
     while (*p && *p != ';') {
       if (isspace((unsigned char)*p)) {
-        export_set_error(EXPORT_ERR_INVALID_PARAM,
-                         "Invalid format: spaces/tabs are not allowed");
+        export_set_error(EXPORT_ERR_INVALID_PARAM, "Invalid format: spaces/tabs are not allowed");
         return -1;
       }
       if (*p == ':') {
         colon_count++;
         if (colon_count > 1) {
-          export_set_error(EXPORT_ERR_INVALID_PARAM,
-                           "Invalid format: multiple ':' in one segment");
+          export_set_error(EXPORT_ERR_INVALID_PARAM, "Invalid format: multiple ':' in one segment");
           return -1;
         }
       }
@@ -1428,9 +1387,8 @@ static inline int validate_column_names(const char *column_names) {
 
     // Empty segment
     if (seg_len == 0) {
-      export_set_error(
-          EXPORT_ERR_INVALID_PARAM,
-          "Invalid format: empty segment (consecutive or trailing ';')");
+      export_set_error(EXPORT_ERR_INVALID_PARAM,
+                       "Invalid format: empty segment (consecutive or trailing ';')");
       return -1;
     }
 
@@ -1446,13 +1404,11 @@ static inline int validate_column_names(const char *column_names) {
     // Validate Name/Type
     if (colon_count == 1) {
       if (colon_pos == 0) {
-        export_set_error(EXPORT_ERR_INVALID_PARAM,
-                         "Invalid format: empty column name before ':'");
+        export_set_error(EXPORT_ERR_INVALID_PARAM, "Invalid format: empty column name before ':'");
         return -1;
       }
       if (colon_pos == seg_len - 1) {
-        export_set_error(EXPORT_ERR_INVALID_PARAM,
-                         "Invalid format: empty type after ':'");
+        export_set_error(EXPORT_ERR_INVALID_PARAM, "Invalid format: empty type after ':'");
         return -1;
       }
     }
@@ -1463,8 +1419,7 @@ static inline int validate_column_names(const char *column_names) {
 
   // Invalid last char
   if (*(p - 1) == ';') {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "Invalid format: cannot end with ';'");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "Invalid format: cannot end with ';'");
     return -1;
   }
 
@@ -1472,10 +1427,8 @@ static inline int validate_column_names(const char *column_names) {
 }
 
 // Helper: Parse column_names for Names and Types
-static inline void parse_column_spec(const char *spec, size_t spec_len,
-                                     size_t *out_name_len,
-                                     const char **out_type_start,
-                                     size_t *out_type_len) {
+static inline void parse_column_spec(const char *spec, size_t spec_len, size_t *out_name_len,
+                                     const char **out_type_start, size_t *out_type_len) {
   const char *colon = NULL;
   for (size_t i = 0; i < spec_len; i++) {
     if (spec[i] == ':') {
@@ -1504,8 +1457,7 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
     return 0;
 
   if (!sqlite->column_names || !sqlite->table_name) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "SQLite's column names or table name is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "SQLite's column names or table name is NULL");
     return -1;
   }
 
@@ -1519,24 +1471,19 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
 
   //  Estimate buffer size: "CREATE TABLE IF NOT EXISTS " + table + " (" +
   //  cols*24 + ");"
-  sql_len = strlen("CREATE TABLE IF NOT EXISTS ") + strlen(sqlite->table_name) +
-            cols_len * 24;
+  sql_len = strlen("CREATE TABLE IF NOT EXISTS ") + strlen(sqlite->table_name) + cols_len * 24;
   sql = (char *)malloc(sql_len);
   if (!sql) {
-    export_set_error(
-        EXPORT_ERR_MEMORY,
-        "Failed to allocate memory for SQLite CREATE TABLE statement");
+    export_set_error(EXPORT_ERR_MEMORY,
+                     "Failed to allocate memory for SQLite CREATE TABLE statement");
     return -1;
   }
 
   // Start CREATE TABLE statement
-  int offset = snprintf(sql, sql_len, "CREATE TABLE IF NOT EXISTS %s (",
-                        sqlite->table_name);
+  int offset = snprintf(sql, sql_len, "CREATE TABLE IF NOT EXISTS %s (", sqlite->table_name);
   if (offset < 0 || (size_t)offset >= sql_len) {
     free(sql);
-    export_set_error(
-        EXPORT_ERR_IO,
-        "Failed to build CREATE TABLE statement for SQLite exporter");
+    export_set_error(EXPORT_ERR_IO, "Failed to build CREATE TABLE statement for SQLite exporter");
     return -1;
   }
 
@@ -1554,9 +1501,8 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
           int written = snprintf(sql + offset, sql_len - offset, ", ");
           if (written < 0 || (size_t)(offset + written) >= sql_len) {
             free(sql);
-            export_set_error(
-                EXPORT_ERR_IO,
-                "Failed to build CREATE TABLE statement for SQLite exporter");
+            export_set_error(EXPORT_ERR_IO,
+                             "Failed to build CREATE TABLE statement for SQLite exporter");
             return -1;
           }
           offset += written;
@@ -1571,17 +1517,15 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
         // Write column definition with type (default TEXT)
         int written;
         if (type_start && type_len > 0)
-          written = snprintf(sql + offset, sql_len - offset, "%.*s %.*s",
-                             (int)name_len, start, (int)type_len, type_start);
+          written = snprintf(sql + offset, sql_len - offset, "%.*s %.*s", (int)name_len, start,
+                             (int)type_len, type_start);
         else
-          written = snprintf(sql + offset, sql_len - offset, "%.*s TEXT",
-                             (int)name_len, start);
+          written = snprintf(sql + offset, sql_len - offset, "%.*s TEXT", (int)name_len, start);
 
         if (written < 0 || (size_t)(offset + written) >= sql_len) {
           free(sql);
-          export_set_error(
-              EXPORT_ERR_IO,
-              "Failed to build CREATE TABLE statement for SQLite exporter");
+          export_set_error(EXPORT_ERR_IO,
+                           "Failed to build CREATE TABLE statement for SQLite exporter");
           return -1;
         }
         offset += written;
@@ -1602,9 +1546,8 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
         int written = snprintf(sql + offset, sql_len - offset, ", ");
         if (written < 0 || (size_t)(offset + written) >= sql_len) {
           free(sql);
-          export_set_error(
-              EXPORT_ERR_IO,
-              "Failed to build CREATE TABLE statement for SQLite exporter");
+          export_set_error(EXPORT_ERR_IO,
+                           "Failed to build CREATE TABLE statement for SQLite exporter");
           return -1;
         }
         offset += written;
@@ -1617,17 +1560,15 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
 
       int written;
       if (type_start && type_len > 0)
-        written = snprintf(sql + offset, sql_len - offset, "%.*s %.*s",
-                           (int)name_len, start, (int)type_len, type_start);
+        written = snprintf(sql + offset, sql_len - offset, "%.*s %.*s", (int)name_len, start,
+                           (int)type_len, type_start);
       else
-        written = snprintf(sql + offset, sql_len - offset, "%.*s TEXT",
-                           (int)name_len, start);
+        written = snprintf(sql + offset, sql_len - offset, "%.*s TEXT", (int)name_len, start);
 
       if (written < 0 || (size_t)(offset + written) >= sql_len) {
         free(sql);
-        export_set_error(
-            EXPORT_ERR_IO,
-            "Failed to build CREATE TABLE statement for SQLite exporter");
+        export_set_error(EXPORT_ERR_IO,
+                         "Failed to build CREATE TABLE statement for SQLite exporter");
         return -1;
       }
       offset += written;
@@ -1638,9 +1579,7 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
   int written = snprintf(sql + offset, sql_len - offset, ")");
   if (written < 0 || (size_t)(offset + written) >= sql_len) {
     free(sql);
-    export_set_error(
-        EXPORT_ERR_IO,
-        "Failed to build CREATE TABLE statement for SQLite exporter");
+    export_set_error(EXPORT_ERR_IO, "Failed to build CREATE TABLE statement for SQLite exporter");
     return -1;
   }
   offset += written;
@@ -1698,13 +1637,12 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
   // Estimate buffer size: need extra space for ", " between columns and "?",
   // " in VALUES
   size_t cols_len = strlen(sqlite->column_names);
-  size_t sql_len = strlen("INSERT INTO ") + strlen(sqlite->table_name) +
-                   cols_len * 2 + (size_t)col_count * 6 + 32;
+  size_t sql_len = strlen("INSERT INTO ") + strlen(sqlite->table_name) + cols_len * 2 +
+                   (size_t)col_count * 6 + 32;
   char *sql = (char *)malloc(sql_len);
   if (!sql) {
-    export_set_error(
-        EXPORT_ERR_MEMORY,
-        "Failed to allocate memory for SQLite INSERT INTO statement");
+    export_set_error(EXPORT_ERR_MEMORY,
+                     "Failed to allocate memory for SQLite INSERT INTO statement");
     return -1;
   }
 
@@ -1712,15 +1650,12 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
   int offset = snprintf(sql, sql_len, "INSERT INTO %s (", sqlite->table_name);
   if (offset < 0) {
     free(sql);
-    export_set_error(EXPORT_ERR_SQLITE, "SQLite snprintf error(offset=%d)",
-                     offset);
+    export_set_error(EXPORT_ERR_SQLITE, "SQLite snprintf error(offset=%d)", offset);
     return -1;
   }
   if ((size_t)offset >= sql_len) {
     free(sql);
-    export_set_error(
-        EXPORT_ERR_IO,
-        "Failed to build INSERT INTO statement for SQLite exporter");
+    export_set_error(EXPORT_ERR_IO, "Failed to build INSERT INTO statement for SQLite exporter");
     return -1;
   }
 
@@ -1738,9 +1673,8 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
           int written = snprintf(sql + offset, sql_len - offset, ", ");
           if (written < 0 || (size_t)(offset + written) >= sql_len) {
             free(sql);
-            export_set_error(
-                EXPORT_ERR_IO,
-                "Failed to build INSERT INTO statement for SQLite exporter");
+            export_set_error(EXPORT_ERR_IO,
+                             "Failed to build INSERT INTO statement for SQLite exporter");
             return -1;
           }
           offset += written;
@@ -1752,13 +1686,11 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
         size_t type_len = 0;
         parse_column_spec(start, spec_len, &name_len, &type_start, &type_len);
 
-        int written = snprintf(sql + offset, sql_len - offset, "%.*s",
-                               (int)name_len, start);
+        int written = snprintf(sql + offset, sql_len - offset, "%.*s", (int)name_len, start);
         if (written < 0 || (size_t)(offset + written) >= sql_len) {
           free(sql);
-          export_set_error(
-              EXPORT_ERR_IO,
-              "Failed to build INSERT INTO statement for SQLite exporter");
+          export_set_error(EXPORT_ERR_IO,
+                           "Failed to build INSERT INTO statement for SQLite exporter");
           return -1;
         }
         offset += written;
@@ -1778,9 +1710,8 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
         int written = snprintf(sql + offset, sql_len - offset, ", ");
         if (written < 0 || (size_t)(offset + written) >= sql_len) {
           free(sql);
-          export_set_error(
-              EXPORT_ERR_IO,
-              "Failed to build INSERT INTO statement for SQLite exporter");
+          export_set_error(EXPORT_ERR_IO,
+                           "Failed to build INSERT INTO statement for SQLite exporter");
           return -1;
         }
         offset += written;
@@ -1791,13 +1722,11 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
       size_t type_len = 0;
       parse_column_spec(start, spec_len, &name_len, &type_start, &type_len);
 
-      int written = snprintf(sql + offset, sql_len - offset, "%.*s",
-                             (int)name_len, start);
+      int written = snprintf(sql + offset, sql_len - offset, "%.*s", (int)name_len, start);
       if (written < 0 || (size_t)(offset + written) >= sql_len) {
         free(sql);
-        export_set_error(
-            EXPORT_ERR_IO,
-            "Failed to build INSERT INTO statement for SQLite exporter");
+        export_set_error(EXPORT_ERR_IO,
+                         "Failed to build INSERT INTO statement for SQLite exporter");
         return -1;
       }
       offset += written;
@@ -1808,9 +1737,7 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
   int written = snprintf(sql + offset, sql_len - offset, ") VALUES (");
   if (written < 0 || (size_t)(offset + written) >= sql_len) {
     free(sql);
-    export_set_error(
-        EXPORT_ERR_IO,
-        "Failed to build INSERT INTO statement for SQLite exporter");
+    export_set_error(EXPORT_ERR_IO, "Failed to build INSERT INTO statement for SQLite exporter");
     return -1;
   }
   offset += written;
@@ -1820,9 +1747,8 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
       written = snprintf(sql + offset, sql_len - offset, ", ");
       if (written < 0 || (size_t)(offset + written) >= sql_len) {
         free(sql);
-        export_set_error(
-            EXPORT_ERR_IO,
-            "Failed to build INSERT INTO statement for SQLite exporter");
+        export_set_error(EXPORT_ERR_IO,
+                         "Failed to build INSERT INTO statement for SQLite exporter");
         return -1;
       }
       offset += written;
@@ -1830,9 +1756,7 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
     written = snprintf(sql + offset, sql_len - offset, "?");
     if (written < 0 || (size_t)(offset + written) >= sql_len) {
       free(sql);
-      export_set_error(
-          EXPORT_ERR_IO,
-          "Failed to build INSERT INTO statement for SQLite exporter");
+      export_set_error(EXPORT_ERR_IO, "Failed to build INSERT INTO statement for SQLite exporter");
       return -1;
     }
     offset += written;
@@ -1841,9 +1765,7 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
   written = snprintf(sql + offset, sql_len - offset, ")");
   if (written < 0 || (size_t)(offset + written) >= sql_len) {
     free(sql);
-    export_set_error(
-        EXPORT_ERR_IO,
-        "Failed to build INSERT INTO statement for SQLite exporter");
+    export_set_error(EXPORT_ERR_IO, "Failed to build INSERT INTO statement for SQLite exporter");
     return -1;
   }
   offset += written;
@@ -1853,8 +1775,7 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
   free(sql);
 
   if (rc != SQLITE_OK) {
-    export_set_error(EXPORT_ERR_SQLITE, "SQLite prepare error: %s",
-                     sqlite3_errmsg(sqlite->db));
+    export_set_error(EXPORT_ERR_SQLITE, "SQLite prepare error: %s", sqlite3_errmsg(sqlite->db));
     sqlite->stmt = NULL;
     return -1;
   }
@@ -1865,15 +1786,13 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
 // Helper: Reset SQLite statement
 static inline int sqlite_reset_stmt(sqlite_exporter_t *sqlite) {
   if (!sqlite || !sqlite->stmt) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "SQLITE exporter or SQLITE stmt is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "SQLITE exporter or SQLITE stmt is NULL");
     return -1;
   }
 
   int rc = sqlite3_reset(sqlite->stmt);
   if (rc != SQLITE_OK) {
-    export_set_error(EXPORT_ERR_SQLITE, "SQLite reset error: %s",
-                     sqlite3_errmsg(sqlite->db));
+    export_set_error(EXPORT_ERR_SQLITE, "SQLite reset error: %s", sqlite3_errmsg(sqlite->db));
     return -1;
   }
 
@@ -1890,8 +1809,7 @@ static inline int sqlite_reset_stmt(sqlite_exporter_t *sqlite) {
 static int sqlite_begin_object_impl(exporter_t *self, const char *name) {
   sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
   if (!sqlite || !sqlite->db) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "SQLITE exporter or SQLITE db is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "SQLITE exporter or SQLITE db is NULL");
     return -1;
   }
 
@@ -1906,8 +1824,7 @@ static int sqlite_begin_object_impl(exporter_t *self, const char *name) {
   // Begin transaction if not active
   if (!sqlite->in_transaction) {
     char *err_msg = NULL;
-    int rc =
-        sqlite3_exec(sqlite->db, "BEGIN TRANSACTION", NULL, NULL, &err_msg);
+    int rc = sqlite3_exec(sqlite->db, "BEGIN TRANSACTION", NULL, NULL, &err_msg);
     if (rc != SQLITE_OK) {
       export_set_error(EXPORT_ERR_SQLITE, "SQLite BEGIN error: %s", err_msg);
       sqlite3_free(err_msg);
@@ -1940,8 +1857,7 @@ static int sqlite_end_object_impl(exporter_t *self) {
 
   // Check if all columns are filled
   if (sqlite->current_column != sqlite->column_count) {
-    export_set_error(EXPORT_ERR_STATE,
-                     "Row incomplete: expected %d columns, got %d",
+    export_set_error(EXPORT_ERR_STATE, "Row incomplete: expected %d columns, got %d",
                      sqlite->column_count, sqlite->current_column);
     sqlite3_clear_bindings(sqlite->stmt);
     sqlite->current_column = 0;
@@ -1952,8 +1868,8 @@ static int sqlite_end_object_impl(exporter_t *self) {
   // Execute the prepared statement
   int rc = sqlite3_step(sqlite->stmt);
   if (rc != SQLITE_DONE) {
-    export_set_error(EXPORT_ERR_SQLITE, "SQLite step error: %s (rc=%d)",
-                     sqlite3_errmsg(sqlite->db), rc);
+    export_set_error(EXPORT_ERR_SQLITE, "SQLite step error: %s (rc=%d)", sqlite3_errmsg(sqlite->db),
+                     rc);
     return -1;
   }
 
@@ -1974,26 +1890,22 @@ static int sqlite_end_object_impl(exporter_t *self) {
   return 0;
 }
 
-static int sqlite_write_int_impl(exporter_t *self, const char *key,
-                                 int64_t value) {
+static int sqlite_write_int_impl(exporter_t *self, const char *key, int64_t value) {
   sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
   if (!sqlite || !sqlite->db || !sqlite->stmt || !sqlite->in_object) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "SQLite exporter or database/statement is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "SQLite exporter or database/statement is NULL");
     return -1;
   }
 
   if (sqlite->current_column >= sqlite->column_count) {
-    export_set_error(
-        EXPORT_ERR_SQLITE,
-        "SQLite exporter: current column index exceeds column count");
+    export_set_error(EXPORT_ERR_SQLITE,
+                     "SQLite exporter: current column index exceeds column count");
     return -1;
   }
 
   int rc = sqlite3_bind_int64(sqlite->stmt, sqlite->current_column + 1, value);
   if (rc != SQLITE_OK) {
-    export_set_error(EXPORT_ERR_SQLITE, "SQLite bind_int64 error: %s",
-                     sqlite3_errmsg(sqlite->db));
+    export_set_error(EXPORT_ERR_SQLITE, "SQLite bind_int64 error: %s", sqlite3_errmsg(sqlite->db));
     return -1;
   }
 
@@ -2005,26 +1917,22 @@ static int sqlite_write_int_impl(exporter_t *self, const char *key,
   return 0;
 }
 
-static int sqlite_write_double_impl(exporter_t *self, const char *key,
-                                    double value) {
+static int sqlite_write_double_impl(exporter_t *self, const char *key, double value) {
   sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
   if (!sqlite || !sqlite->db || !sqlite->stmt || !sqlite->in_object) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "SQLite exporter or database/statement is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "SQLite exporter or database/statement is NULL");
     return -1;
   }
 
   if (sqlite->current_column >= sqlite->column_count) {
-    export_set_error(
-        EXPORT_ERR_SQLITE,
-        "SQLite exporter: current column index exceeds column count");
+    export_set_error(EXPORT_ERR_SQLITE,
+                     "SQLite exporter: current column index exceeds column count");
     return -1;
   }
 
   int rc = sqlite3_bind_double(sqlite->stmt, sqlite->current_column + 1, value);
   if (rc != SQLITE_OK) {
-    export_set_error(EXPORT_ERR_SQLITE, "SQLite bind_double error: %s",
-                     sqlite3_errmsg(sqlite->db));
+    export_set_error(EXPORT_ERR_SQLITE, "SQLite bind_double error: %s", sqlite3_errmsg(sqlite->db));
     return -1;
   }
 
@@ -2036,27 +1944,23 @@ static int sqlite_write_double_impl(exporter_t *self, const char *key,
   return 0;
 }
 
-static int sqlite_write_string_impl(exporter_t *self, const char *key,
-                                    const char *value) {
+static int sqlite_write_string_impl(exporter_t *self, const char *key, const char *value) {
   sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
   if (!sqlite || !sqlite->db || !sqlite->stmt || !sqlite->in_object) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "SQLite exporter or database/statement is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "SQLite exporter or database/statement is NULL");
     return -1;
   }
 
   if (sqlite->current_column >= sqlite->column_count) {
-    export_set_error(
-        EXPORT_ERR_SQLITE,
-        "SQLite exporter: current column index exceeds column count");
+    export_set_error(EXPORT_ERR_SQLITE,
+                     "SQLite exporter: current column index exceeds column count");
     return -1;
   }
 
-  int rc = sqlite3_bind_text(sqlite->stmt, sqlite->current_column + 1,
-                             value ? value : "", -1, SQLITE_TRANSIENT);
+  int rc = sqlite3_bind_text(sqlite->stmt, sqlite->current_column + 1, value ? value : "", -1,
+                             SQLITE_TRANSIENT);
   if (rc != SQLITE_OK) {
-    export_set_error(EXPORT_ERR_SQLITE, "SQLite bind_text error: %s",
-                     sqlite3_errmsg(sqlite->db));
+    export_set_error(EXPORT_ERR_SQLITE, "SQLite bind_text error: %s", sqlite3_errmsg(sqlite->db));
     return -1;
   }
 
@@ -2068,28 +1972,23 @@ static int sqlite_write_string_impl(exporter_t *self, const char *key,
   return 0;
 }
 
-static int sqlite_write_bool_impl(exporter_t *self, const char *key,
-                                  bool value) {
+static int sqlite_write_bool_impl(exporter_t *self, const char *key, bool value) {
   sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
   if (!sqlite || !sqlite->db || !sqlite->stmt || !sqlite->in_object) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "SQLite exporter or database/statement is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "SQLite exporter or database/statement is NULL");
     return -1;
   }
 
   if (sqlite->current_column >= sqlite->column_count) {
-    export_set_error(
-        EXPORT_ERR_SQLITE,
-        "SQLite exporter: current column index exceeds column count");
+    export_set_error(EXPORT_ERR_SQLITE,
+                     "SQLite exporter: current column index exceeds column count");
     return -1;
   }
 
   // SQLite stores booleans as integers (0 or 1)
-  int rc =
-      sqlite3_bind_int(sqlite->stmt, sqlite->current_column + 1, value ? 1 : 0);
+  int rc = sqlite3_bind_int(sqlite->stmt, sqlite->current_column + 1, value ? 1 : 0);
   if (rc != SQLITE_OK) {
-    export_set_error(EXPORT_ERR_SQLITE, "SQLite bind_int error: %s",
-                     sqlite3_errmsg(sqlite->db));
+    export_set_error(EXPORT_ERR_SQLITE, "SQLite bind_int error: %s", sqlite3_errmsg(sqlite->db));
     return -1;
   }
 
@@ -2104,22 +2003,19 @@ static int sqlite_write_bool_impl(exporter_t *self, const char *key,
 static int sqlite_write_null_impl(exporter_t *self, const char *key) {
   sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
   if (!sqlite || !sqlite->db || !sqlite->stmt || !sqlite->in_object) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "SQLite exporter or database/statement is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "SQLite exporter or database/statement is NULL");
     return -1;
   }
 
   if (sqlite->current_column >= sqlite->column_count) {
-    export_set_error(
-        EXPORT_ERR_SQLITE,
-        "SQLite exporter: current column index exceeds column count");
+    export_set_error(EXPORT_ERR_SQLITE,
+                     "SQLite exporter: current column index exceeds column count");
     return -1;
   }
 
   int rc = sqlite3_bind_null(sqlite->stmt, sqlite->current_column + 1);
   if (rc != SQLITE_OK) {
-    export_set_error(EXPORT_ERR_SQLITE, "SQLite bind_null error: %s",
-                     sqlite3_errmsg(sqlite->db));
+    export_set_error(EXPORT_ERR_SQLITE, "SQLite bind_null error: %s", sqlite3_errmsg(sqlite->db));
     return -1;
   }
 
@@ -2134,30 +2030,26 @@ static int sqlite_write_null_impl(exporter_t *self, const char *key) {
 static int sqlite_begin_array_impl(exporter_t *self, const char *key) {
   (void)self;
   (void)key;
-  export_set_error(EXPORT_ERR_SQLITE,
-                   "Array serialization not supported in SQLite");
+  export_set_error(EXPORT_ERR_SQLITE, "Array serialization not supported in SQLite");
   return -1;
 }
 
 static int sqlite_end_array_impl(exporter_t *self) {
   (void)self;
-  export_set_error(EXPORT_ERR_SQLITE,
-                   "Array serialization not supported in SQLite");
+  export_set_error(EXPORT_ERR_SQLITE, "Array serialization not supported in SQLite");
   return -1;
 }
 
 static int sqlite_flush_impl(exporter_t *self) {
   sqlite_exporter_t *sqlite = (sqlite_exporter_t *)self;
   if (!sqlite || !sqlite->db) {
-    export_set_error(EXPORT_ERR_INVALID_PARAM,
-                     "SQLITE exporter or SQLITE db is NULL");
+    export_set_error(EXPORT_ERR_INVALID_PARAM, "SQLITE exporter or SQLITE db is NULL");
     return -1;
   }
 
   // Check if all columns are filled
   if (sqlite->current_column != sqlite->column_count) {
-    export_set_error(EXPORT_ERR_STATE,
-                     "Row incomplete: expected %d columns, got %d",
+    export_set_error(EXPORT_ERR_STATE, "Row incomplete: expected %d columns, got %d",
                      sqlite->column_count, sqlite->current_column);
     sqlite3_clear_bindings(sqlite->stmt);
     sqlite->current_column = 0;
@@ -2249,8 +2141,7 @@ sqlite_exporter_t create_sqlite_exporter(sqlite3 *db, const char *table_name,
   return sqlite;
 }
 
-int sqlite_exporter_set_auto_commit(sqlite_exporter_t *sqlite,
-                                    bool auto_commit) {
+int sqlite_exporter_set_auto_commit(sqlite_exporter_t *sqlite, bool auto_commit) {
   if (!sqlite) {
     export_set_error(EXPORT_ERR_INVALID_PARAM, "SQLITE exporter is NULL");
     return -1;
