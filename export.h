@@ -1,3 +1,113 @@
+/* export.h
+
+A lightweight, single-header C library for exporting structured data to CSV,
+JSON/JSONL, and SQLite
+
+# Features
+- Unified API: Single `exporter_t` interface works seamlessly across CSV, JSON,
+ JSONL, and SQLite
+- Thread-Safe Errors: Uses compiler-provided thread-local storage for
+ `errno`-style error codes and messages
+- CSV: RFC 4180 compliant string quoting, configurable single/multi-header
+ mode, automatic array wrapping
+- JSON/JSONL: Pretty-printing (2-space indent), JSON Lines mode, automatic
+ nesting stack management with dynamic growth
+- SQLite: Automatic `CREATE TABLE IF NOT EXISTS`, prepared `INSERT` statements,
+transaction batching, auto-commit toggle
+- Zero Dependencies: Pure C (SQLite3 requires external linking only when
+ `SQLITE_EXPORT` is defined)
+
+
+# Usage Notes
+1. Single-Header Setup: Define `EXPORT_IMPLEMENTATION` in exactly **one** `.c`
+file before including this header:
+
+```c
+#define EXPORT_IMPLEMENTATION
+#include "export.h"
+```
+
+2. SQLite Support: If you need export data into SQLite database define
+ `SQLITE_EXPORT` before including the header, and link against `sqlite3` (e.g.,
+ `-lsqlite3`)
+3. Error Handling: All exporter methods return `0` on success, `-1` on error.
+ Use `export_get_last_error()` or `export_strerror(export_last_error)` for
+ diagnostics
+4. Column Mapping (SQLite): Table structure is described in column_names string
+ in format "Name1:Type1;Name2:Type2". Type is optional, defaults to TEXT if
+ omitted or empty
+5. Arrays (SQLite): SQLite exporter doesn't support begin/end_array methods,
+ calling them will return error.
+6. CSV Delimiters: Uses `;` as the field separator for object members, and `,`
+ for array elements. All string values are automatically quoted per RFC 4180
+7. Memory Management: Always call `.destroy()` on the base exporter to free
+ internal allocations
+8. C Standard: Requires C99 for `<stdbool.h>`. C11 is recommended for native
+ `<threads.h>` thread-local storage (falls back to compiler extensions
+ otherwise)
+
+
+# Examples
+
+## CSV Export
+
+```c
+csv_exporter_t csv = create_csv_exporter(stdout, "id,name,score", true);
+
+csv.base.begin_object(&csv.base, NULL);
+csv.base.write_int(&csv.base, "id", 1);
+csv.base.write_string(&csv.base, "name", "Alice");
+csv.base.write_double(&csv.base, "score", 95.5);
+csv.base.end_object(&csv.base);
+
+csv.base.destroy(&csv.base);
+```
+
+
+## JSON & JSONL Export
+
+```c
+// Pretty-printed standard JSON
+json_exporter_t json = create_json_exporter(stdout, true, false);
+
+json.base.begin_object(&json.base, "root");
+json.base.write_string(&json.base, "greeting", "Hello");
+json.base.begin_array(&json.base, "nums");
+json.base.write_int(&json.base, NULL, 1);
+json.base.write_int(&json.base, NULL, 2);
+json.base.end_array(&json.base);
+json.base.end_object(&json.base);
+
+json.base.destroy(&json.base);
+```
+
+## SQLite Export
+
+```c
+// Assumes `sqlite3 *db` is already opened and valid
+sqlite_exporter_t sql = create_sqlite_exporter(db, "users", "id;name;active");
+sqlite_exporter_set_auto_commit(&sql, true);
+
+sql.base.begin_object(&sql.base, NULL);
+sql.base.write_int(&sql.base, NULL, 42);
+sql.base.write_string(&sql.base, NULL, "Bob");
+sql.base.write_bool(&sql.base, NULL, true);
+sql.base.end_object(&sql.base);
+
+sql.base.destroy(&sql.base);
+```
+
+## Error Handling Pattern
+
+```c
+int rc = exporter.base.write_string(&exporter.base, "key", NULL);
+if (rc == -1) {
+  fprintf(stderr, "Export failed [%d]: %s\n", export_last_error,
+export_get_last_error()); export_clear_error(); // Reset error
+}
+```
+
+*/
 #ifndef EXPORT_H
 #define EXPORT_H
 
@@ -308,6 +418,8 @@ int sqlite_exporter_set_auto_commit(sqlite_exporter_t *sqlite,
 #endif
 
 /*----------------------SQLITE EXPORTER----------------------*/
+
+#endif // EXPORT_H
 
 #ifdef EXPORT_IMPLEMENTATION
 
@@ -2155,4 +2267,25 @@ int sqlite_exporter_set_auto_commit(sqlite_exporter_t *sqlite,
 
 #endif // EXPORT_IMPLEMENTATION
 
-#endif // EXPORT_H
+/*
+MIT License                                                              *
+
+Copyright (c) 2026 R2aper
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+*/
