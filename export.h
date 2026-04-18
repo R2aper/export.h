@@ -273,7 +273,7 @@ typedef struct sqlite_exporter_t {
   sqlite3 *db;              ///< SQLite database connection
   sqlite3_stmt *stmt;       ///< Prepared INSERT statement
   const char *table_name;   ///
-  const char *column_names; ///< Semicolon-separated column names
+  const char *column_names; ///< Semicolon-separated column names and types
   int column_count;         ///
   int current_column;       ///< Current column index being filled
   bool auto_commit;         ///< If true, commit after each object (default)
@@ -286,7 +286,8 @@ typedef struct sqlite_exporter_t {
 
 /**
  * @brief Creates a new exporter in SQLite format
- * @note  column_names should be looks like: "Name1;Name2"
+ * @note  column_names should be in format: "Name1:Type1;Name2:Type2".
+ * Type is optional, defaults to TEXT if omitted or empty.
  *
  * @param db Open sqlite3 database
  * @param table_name Name of table
@@ -1246,13 +1247,39 @@ int json_exporter_set_output(json_exporter_t *json, FILE *file) {
 #include <sqlite3.h>
 #include <string.h>
 
+static inline void parse_column_spec(const char *spec, size_t spec_len,
+                                     size_t *out_name_len,
+                                     const char **out_type_start,
+                                     size_t *out_type_len) {
+  const char *colon = NULL;
+  for (size_t i = 0; i < spec_len; i++) {
+    if (spec[i] == ':') {
+      colon = spec + i;
+      break;
+    }
+  }
+
+  if (colon) {
+    *out_name_len = (size_t)(colon - spec);
+    *out_type_start = colon + 1;
+    *out_type_len = spec_len - (size_t)(colon - spec) - 1;
+    // Handle empty type (e.g., "Name:")
+    if (*out_type_len == 0)
+      *out_type_start = NULL;
+  } else {
+    *out_name_len = spec_len;
+    *out_type_start = NULL;
+    *out_type_len = 0;
+  }
+}
+
 static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
   if (!sqlite || sqlite->table_created)
     return 0;
 
   if (!sqlite->column_names || !sqlite->table_name) {
     export_set_error(EXPORT_ERR_NULL_PARAM,
-                     "SQlite's column names or table name is NULL");
+                     "SQLite's column names or table name is NULL");
     return -1;
   }
 
@@ -1269,7 +1296,7 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
   //  Estimate buffer size: "CREATE TABLE IF NOT EXISTS " + table + " (" +
   //  cols*10 + ");"
   sql_len = strlen("CREATE TABLE IF NOT EXISTS ") + strlen(sqlite->table_name) +
-            cols_len * 16;
+            cols_len * 24;
   sql = (char *)malloc(sql_len);
   if (!sql) {
     export_set_error(
@@ -1289,17 +1316,16 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
     return -1;
   }
 
-  // Parse column names and create TEXT columns
+  // Parse column names and types
   const char *start = cols;
   const char *end = cols;
   bool first_col = true;
 
   while (*end) {
     if (*end == ';') {
-      size_t col_len = (size_t)(end - start);
+      size_t spec_len = (size_t)(end - start);
 
-      // Skip empty column names (e.g., trailing semicolon)
-      if (col_len > 0) {
+      if (spec_len > 0) {
         if (!first_col) {
           int written = snprintf(sql + offset, sql_len - offset, ", ");
           if (written < 0 || (size_t)(offset + written) >= sql_len) {
@@ -1312,9 +1338,22 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
           offset += written;
         }
 
-        // Write column name as TEXT type
-        int written = snprintf(sql + offset, sql_len - offset, "%.*s TEXT",
-                               (int)col_len, start);
+        // Parse "Name:Type" or "Name"
+        size_t name_len = 0;
+        const char *type_start = NULL;
+        size_t type_len = 0;
+        parse_column_spec(start, spec_len, &name_len, &type_start, &type_len);
+
+        // Write column definition with type (default TEXT)
+        int written;
+        if (type_start && type_len > 0) {
+          written = snprintf(sql + offset, sql_len - offset, "%.*s %.*s",
+                             (int)name_len, start, (int)type_len, type_start);
+        } else {
+          written = snprintf(sql + offset, sql_len - offset, "%.*s TEXT",
+                             (int)name_len, start);
+        }
+
         if (written < 0 || (size_t)(offset + written) >= sql_len) {
           free(sql);
           export_set_error(
@@ -1332,11 +1371,10 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
     end++;
   }
 
-  // Handle last column (if not ending with semicolon or if there's content
-  // after last semicolon)
+  // Handle last column
   {
-    size_t col_len = (size_t)(end - start);
-    if (col_len > 0) {
+    size_t spec_len = (size_t)(end - start);
+    if (spec_len > 0) {
       if (!first_col) {
         int written = snprintf(sql + offset, sql_len - offset, ", ");
         if (written < 0 || (size_t)(offset + written) >= sql_len) {
@@ -1349,8 +1387,20 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
         offset += written;
       }
 
-      int written = snprintf(sql + offset, sql_len - offset, "%.*s TEXT",
-                             (int)col_len, start);
+      size_t name_len = 0;
+      const char *type_start = NULL;
+      size_t type_len = 0;
+      parse_column_spec(start, spec_len, &name_len, &type_start, &type_len);
+
+      int written;
+      if (type_start && type_len > 0) {
+        written = snprintf(sql + offset, sql_len - offset, "%.*s %.*s",
+                           (int)name_len, start, (int)type_len, type_start);
+      } else {
+        written = snprintf(sql + offset, sql_len - offset, "%.*s TEXT",
+                           (int)name_len, start);
+      }
+
       if (written < 0 || (size_t)(offset + written) >= sql_len) {
         free(sql);
         export_set_error(
@@ -1457,9 +1507,9 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
 
   while (*end) {
     if (*end == ';') {
-      size_t col_len = (size_t)(end - start);
+      size_t spec_len = (size_t)(end - start);
 
-      if (col_len > 0) {
+      if (spec_len > 0) {
         if (!first) {
           int written = snprintf(sql + offset, sql_len - offset, ", ");
           if (written < 0 || (size_t)(offset + written) >= sql_len) {
@@ -1472,8 +1522,14 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
           offset += written;
         }
 
+        // Extract only the column name (ignore type for INSERT statement)
+        size_t name_len = 0;
+        const char *type_start = NULL;
+        size_t type_len = 0;
+        parse_column_spec(start, spec_len, &name_len, &type_start, &type_len);
+
         int written = snprintf(sql + offset, sql_len - offset, "%.*s",
-                               (int)col_len, start);
+                               (int)name_len, start);
         if (written < 0 || (size_t)(offset + written) >= sql_len) {
           free(sql);
           export_set_error(
@@ -1491,10 +1547,9 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
     end++;
   }
 
-  // Handle last column
   {
-    size_t col_len = (size_t)(end - start);
-    if (col_len > 0) {
+    size_t spec_len = (size_t)(end - start);
+    if (spec_len > 0) {
       if (!first) {
         int written = snprintf(sql + offset, sql_len - offset, ", ");
         if (written < 0 || (size_t)(offset + written) >= sql_len) {
@@ -1507,8 +1562,13 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
         offset += written;
       }
 
-      int written =
-          snprintf(sql + offset, sql_len - offset, "%.*s", (int)col_len, start);
+      size_t name_len = 0;
+      const char *type_start = NULL;
+      size_t type_len = 0;
+      parse_column_spec(start, spec_len, &name_len, &type_start, &type_len);
+
+      int written = snprintf(sql + offset, sql_len - offset, "%.*s",
+                             (int)name_len, start);
       if (written < 0 || (size_t)(offset + written) >= sql_len) {
         free(sql);
         export_set_error(

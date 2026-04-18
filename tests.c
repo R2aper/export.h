@@ -3,7 +3,7 @@
 //
 // Compile:
 //   gcc -o tests tests.c -lsqlite3 -std=c11 -Wall -Wextra
-//   ./test_export
+//   ./test
 
 #define EXPORT_IMPLEMENTATION
 #define SQLITE_EXPORT
