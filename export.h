@@ -1817,7 +1817,7 @@ static int sqlite_write_string_impl(exporter_t *self, const char *key,
   }
 
   int rc = sqlite3_bind_text(sqlite->stmt, sqlite->current_column + 1,
-                             value ? value : "", -1, SQLITE_STATIC);
+                             value ? value : "", -1, SQLITE_TRANSIENT);
   if (rc != SQLITE_OK) {
     export_set_error(EXPORT_ERR_SQLITE, "SQLite bind_text error: %s",
                      sqlite3_errmsg(sqlite->db));
