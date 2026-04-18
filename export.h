@@ -1713,6 +1713,17 @@ static int sqlite_end_object_impl(exporter_t *self) {
     return -1;
   }
 
+  // Check if all columns are filled
+  if (sqlite->current_column != sqlite->column_count) {
+    export_set_error(EXPORT_ERR_STATE,
+                     "Row incomplete: expected %d columns, got %d",
+                     sqlite->column_count, sqlite->current_column);
+    sqlite3_clear_bindings(sqlite->stmt);
+    sqlite->current_column = 0;
+    sqlite->in_object = false;
+    return -1;
+  }
+
   // Execute the prepared statement
   int rc = sqlite3_step(sqlite->stmt);
   if (rc != SQLITE_DONE) {
@@ -1915,6 +1926,17 @@ static int sqlite_flush_impl(exporter_t *self) {
   if (!sqlite || !sqlite->db) {
     export_set_error(EXPORT_ERR_NULL_PARAM,
                      "SQLITE exporter or SQLITE db is NULL");
+    return -1;
+  }
+
+  // Check if all columns are filled
+  if (sqlite->current_column != sqlite->column_count) {
+    export_set_error(EXPORT_ERR_STATE,
+                     "Row incomplete: expected %d columns, got %d",
+                     sqlite->column_count, sqlite->current_column);
+    sqlite3_clear_bindings(sqlite->stmt);
+    sqlite->current_column = 0;
+    sqlite->in_object = false;
     return -1;
   }
 
