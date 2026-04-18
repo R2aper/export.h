@@ -1,9 +1,6 @@
 #ifndef EXPORT_H
 #define EXPORT_H
 
-// TODO:
-// - Raw format
-
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -287,7 +284,7 @@ typedef struct sqlite_exporter_t {
 /**
  * @brief Creates a new exporter in SQLite format
  * @note  column_names should be in format: "Name1:Type1;Name2:Type2".
- * Type is optional, defaults to TEXT if omitted or empty.
+ * Type is optional, defaults to TEXT if omitted or empty
  *
  * @param db Open sqlite3 database
  * @param table_name Name of table
@@ -314,9 +311,10 @@ int sqlite_exporter_set_auto_commit(sqlite_exporter_t *sqlite,
 
 #ifdef EXPORT_IMPLEMENTATION
 
+#include <ctype.h>
+#include <inttypes.h>
 #include <stdarg.h>
 #include <stdlib.h>
-#include <ctype.h>
 
 /*----------------------ERROR HANDLING-----------------------*/
 
@@ -325,8 +323,7 @@ EXPORT_THREAD_LOCAL export_error_code_t export_last_error = EXPORT_OK;
 EXPORT_THREAD_LOCAL char export_last_error_msg[EXPORT_ERR_MSG_SIZE] = {0};
 
 // Internal helper: sets error code and message
-static inline void export_set_error(export_error_code_t code, const char *fmt,
-                                    ...) {
+static void export_set_error(export_error_code_t code, const char *fmt, ...) {
   export_last_error = code;
   va_list args;
   va_start(args, fmt);
@@ -412,6 +409,8 @@ static int csv_begin_object_impl(exporter_t *self, const char *name) {
     csv->header_written = true;
   }
 
+  (void)name;
+
   return 0;
 }
 
@@ -451,10 +450,13 @@ static int csv_write_int_impl(exporter_t *self, const char *key,
 
   csv->is_first = false;
 
-  if (fprintf(csv->output, "%lld", value) < 0) {
+  if (fprintf(csv->output, "%" PRId64, value) < 0) {
     export_set_error(EXPORT_ERR_IO, "Failed to write CSV integer");
     return -1;
   }
+
+  (void)key;
+
   return 0;
 }
 
@@ -481,6 +483,8 @@ static int csv_write_double_impl(exporter_t *self, const char *key,
     return -1;
   }
 
+  (void)key;
+
   return 0;
 }
 
@@ -501,6 +505,8 @@ static int csv_write_string_impl(exporter_t *self, const char *key,
   }
 
   csv->is_first = false;
+
+  (void)key;
 
   return csv_write_quoted_string(csv->output, value);
 }
@@ -527,6 +533,8 @@ static int csv_write_bool_impl(exporter_t *self, const char *key, bool value) {
     return -1;
   }
 
+  (void)key;
+
   return 0;
 }
 
@@ -551,6 +559,8 @@ static int csv_write_null_impl(exporter_t *self, const char *key) {
     export_set_error(EXPORT_ERR_IO, "Failed to write CSV null");
     return -1;
   }
+
+  (void)key;
 
   return 0;
 }
@@ -577,6 +587,8 @@ static int csv_begin_array_impl(exporter_t *self, const char *key) {
 
   csv->in_array = true;
   csv->is_first = true;
+
+  (void)key;
 
   return 0;
 }
@@ -933,7 +945,7 @@ static int json_write_int_impl(exporter_t *self, const char *key,
       return -1;
     }
   }
-  if (fprintf(json->output, "%lld", value) < 0) {
+  if (fprintf(json->output, "%" PRId64, value) < 0) {
     export_set_error(EXPORT_ERR_IO, "Failed to write JSON integer");
     return -1;
   }
@@ -1261,6 +1273,7 @@ int json_exporter_set_output(json_exporter_t *json, FILE *file) {
 #include <sqlite3.h>
 #include <string.h>
 
+// Helper: Check if colum_names are in valid format
 static inline int validate_column_names(const char *column_names) {
   if (!column_names || !*column_names) {
     export_set_error(EXPORT_ERR_INVALID_PARAM,
@@ -1337,16 +1350,16 @@ static inline int validate_column_names(const char *column_names) {
   }
 
   // Invalid last char
-  if (*(p-1) == ';') {
+  if (*(p - 1) == ';') {
     export_set_error(EXPORT_ERR_INVALID_PARAM,
                      "Invalid format: cannot end with ';'");
     return -1;
   }
-  
 
   return 0;
 }
 
+// Helper: Parse column_names for Names and Types
 static inline void parse_column_spec(const char *spec, size_t spec_len,
                                      size_t *out_name_len,
                                      const char **out_type_start,
@@ -1373,6 +1386,7 @@ static inline void parse_column_spec(const char *spec, size_t spec_len,
   }
 }
 
+// Helper: Ensure that table is created
 static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
   if (!sqlite || sqlite->table_created)
     return 0;
@@ -1384,8 +1398,6 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
   }
 
   // Build CREATE TABLE statement
-  // column_names is semicolon-separated: "id;name;value"
-  // We need: "id INTEGER, name TEXT, value REAL" (all as TEXT for simplicity)
   char *sql = NULL;
   size_t sql_len = 0;
 
@@ -1394,7 +1406,7 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
   size_t cols_len = strlen(cols);
 
   //  Estimate buffer size: "CREATE TABLE IF NOT EXISTS " + table + " (" +
-  //  cols*10 + ");"
+  //  cols*24 + ");"
   sql_len = strlen("CREATE TABLE IF NOT EXISTS ") + strlen(sqlite->table_name) +
             cols_len * 24;
   sql = (char *)malloc(sql_len);
@@ -1446,13 +1458,12 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
 
         // Write column definition with type (default TEXT)
         int written;
-        if (type_start && type_len > 0) {
+        if (type_start && type_len > 0)
           written = snprintf(sql + offset, sql_len - offset, "%.*s %.*s",
                              (int)name_len, start, (int)type_len, type_start);
-        } else {
+        else
           written = snprintf(sql + offset, sql_len - offset, "%.*s TEXT",
                              (int)name_len, start);
-        }
 
         if (written < 0 || (size_t)(offset + written) >= sql_len) {
           free(sql);
@@ -1493,13 +1504,12 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
       parse_column_spec(start, spec_len, &name_len, &type_start, &type_len);
 
       int written;
-      if (type_start && type_len > 0) {
+      if (type_start && type_len > 0)
         written = snprintf(sql + offset, sql_len - offset, "%.*s %.*s",
                            (int)name_len, start, (int)type_len, type_start);
-      } else {
+      else
         written = snprintf(sql + offset, sql_len - offset, "%.*s TEXT",
                            (int)name_len, start);
-      }
 
       if (written < 0 || (size_t)(offset + written) >= sql_len) {
         free(sql);
@@ -1539,6 +1549,7 @@ static inline int sqlite_ensure_table_created(sqlite_exporter_t *sqlite) {
   return 0;
 }
 
+// Helper: Create insert statement
 static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
   if (!sqlite || !sqlite->column_names || !sqlite->table_name) {
     export_set_error(EXPORT_ERR_INVALID_PARAM,
@@ -1739,6 +1750,7 @@ static inline int sqlite_prepare_insert_stmt(sqlite_exporter_t *sqlite) {
   return 0;
 }
 
+// Helper: Reset SQLite statement
 static inline int sqlite_reset_stmt(sqlite_exporter_t *sqlite) {
   if (!sqlite || !sqlite->stmt) {
     export_set_error(EXPORT_ERR_INVALID_PARAM,
@@ -2062,9 +2074,8 @@ static void sqlite_destroy_impl(exporter_t *self) {
     return;
 
   // Commit any pending transaction before destroying
-  if (sqlite->in_transaction) {
+  if (sqlite->in_transaction)
     sqlite_flush_impl(&sqlite->base);
-  }
 
   if (sqlite->stmt) {
     sqlite3_finalize(sqlite->stmt);

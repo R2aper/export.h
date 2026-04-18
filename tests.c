@@ -66,9 +66,10 @@ static int g_tests_failed = 0;
 /* ====================== TEST FUNCTIONS ====================== */
 
 #ifdef SQLITE_EXPORT
-static int test_sqlite_create() {
+static int test_sqlite_create(void) {
   const char *cols = "name;";
   sqlite_exporter_t s = create_sqlite_exporter(NULL, "test_data", cols);
+  (void)s;
 
   return export_last_error;
 }
