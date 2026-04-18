@@ -65,18 +65,32 @@ static int g_tests_failed = 0;
 
 /* ====================== TEST FUNCTIONS ====================== */
 
+#ifdef SQLITE_EXPORT
+static int test_sqlite_create() {
+  const char *cols = "name;";
+  sqlite_exporter_t s = create_sqlite_exporter(NULL, "test_data", cols);
+
+  return export_last_error;
+}
+#endif
+
 static void test_error_handling(void) {
   TEST_SECTION("Error Handling");
 
   EXPECT_ERROR(csv_exporter_set_output(NULL, stdout),
-               "csv_exporter_set_output(NULL)", EXPORT_ERR_NULL_PARAM);
+               "csv_exporter_set_output(NULL)", EXPORT_ERR_INVALID_PARAM);
 
   EXPECT_ERROR(json_exporter_set_pretty(NULL, true),
-               "json_exporter_set_pretty(NULL)", EXPORT_ERR_NULL_PARAM);
+               "json_exporter_set_pretty(NULL)", EXPORT_ERR_INVALID_PARAM);
 
 #ifdef SQLITE_EXPORT
+  EXPECT_ERROR(test_sqlite_create(),
+               "create_sqlite_exporter(Invalid column_names)",
+               EXPORT_ERR_INVALID_PARAM);
+
   EXPECT_ERROR(sqlite_exporter_set_auto_commit(NULL, true),
-               "sqlite_exporter_set_auto_commit(NULL)", EXPORT_ERR_NULL_PARAM);
+               "sqlite_exporter_set_auto_commit(NULL)",
+               EXPORT_ERR_INVALID_PARAM);
 #endif
 
   // Invalid state
@@ -218,8 +232,9 @@ static void test_sqlite_exporter(void) {
     return;
   }
 
-  const char *cols = "name;age;salary;active;notes";
+  const char *cols = "name:TEXT;age:INTEGER;salary:REAL;active:INTEGER;notes";
   sqlite_exporter_t s = create_sqlite_exporter(db, "test_data", cols);
+
   EXPECT_SUCCESS(sqlite_exporter_set_auto_commit(&s, true), "set auto-commit");
 
   EXPECT_SUCCESS(s.base.begin_object(&s.base, NULL), "begin row 1");
